@@ -226,7 +226,7 @@
 import * as THREE from 'three';
 import { CELL, ENEMY_TYPES, GRID_H, GRID_W, MAX_WAVE, TOWER_TYPES } from './src/game/config.js';
 import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enemyHealth, findPath, generateWave } from './src/game/rules.js';
-import { createTowerRewardPool, drawRewards } from './src/game/rewards.js';
+import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInventory } from './src/game/rewards.js';
 
 (function(){
   "use strict";
@@ -242,7 +242,7 @@ import { createTowerRewardPool, drawRewards } from './src/game/rewards.js';
   let selectedTower = null;
   let spawnQueue = [], spawnTimer = 0;
   let towers = [], enemies = [], projectiles = [], effects = [], pulses = [];
-  let availableTowerKeys = new Set(Object.keys(TOWER_TYPES));
+  let inventory = {tower: Object.fromEntries(Object.keys(TOWER_TYPES).map((key) => [key, 1]))};
   const rewardPool = createTowerRewardPool(TOWER_TYPES);
   let currentRewards = [];
   let occupiedSet = new Set(), wallSet = new Set(), pathSet = new Set(), pathSetRoute = [];
@@ -900,7 +900,8 @@ import { createTowerRewardPool, drawRewards } from './src/game/rewards.js';
   function buildNodeCards(){
     nodeCardsEl.innerHTML = '';
     Object.values(TOWER_TYPES).forEach(cfg=>{
-      if(!availableTowerKeys.has(cfg.key)) return;
+      const inventoryCount = inventory.tower[cfg.key] || 0;
+      if(inventoryCount < 1) return;
       const card = document.createElement('div');
       card.className = 'node-card';
       card.dataset.key = cfg.key;
@@ -911,7 +912,7 @@ import { createTowerRewardPool, drawRewards } from './src/game/rewards.js';
         <div class="node-desc">${cfg.desc}</div>
       `;
       card.addEventListener('click', ()=>{
-        if(gameOver || !availableTowerKeys.has(cfg.key)) return;
+        if(gameOver || (inventory.tower[cfg.key] || 0) < 1) return;
         if(selectedTowerType === cfg.key){
           selectedTowerType = null;
           clearPreview();
@@ -965,7 +966,7 @@ import { createTowerRewardPool, drawRewards } from './src/game/rewards.js';
   }
 
   function selectReward(reward){
-    availableTowerKeys.add(reward.key);
+    addRewardToInventory(inventory, reward);
     awaitingReward = false;
     currentRewards = [];
     rewardCardsEl.innerHTML = '';
@@ -1011,7 +1012,7 @@ import { createTowerRewardPool, drawRewards } from './src/game/rewards.js';
   }
   purgeBtn.addEventListener('click', ()=>{
     if(!selectedTower) return;
-    availableTowerKeys.add(selectedTower.key);
+    addRewardToInventory(inventory, {type: 'tower', key: selectedTower.key});
     removeTower(selectedTower);
     deselectTower();
     refreshNodeCards();
@@ -1092,14 +1093,14 @@ import { createTowerRewardPool, drawRewards } from './src/game/rewards.js';
           return;
         }
         const cfg = TOWER_TYPES[selectedTowerType];
-        const placement = canPlaceTower({gx, gy, isWall: wallSet.has(key), occupied: occupiedSet, availableTowerKeys, typeKey: selectedTowerType});
+        const placement = canPlaceTower({gx, gy, isWall: wallSet.has(key), occupied: occupiedSet, inventory, typeKey: selectedTowerType});
         if(!placement.ok){
-          const messages = {wall:'DEPLOY A WALL FIRST', occupied:'NODE SLOT OCCUPIED', unavailable:'NODE ALREADY DEPLOYED'};
+          const messages = {wall:'DEPLOY A WALL FIRST', occupied:'NODE SLOT OCCUPIED', unavailable:'NO NODE IN INVENTORY'};
           showMessage(messages[placement.reason] || 'INVALID NODE DEPLOYMENT');
           return;
         }
         placeTower(gx, gy, selectedTowerType);
-        availableTowerKeys.delete(selectedTowerType);
+        removeFromInventory(inventory, 'tower', selectedTowerType);
         selectedTowerType = null;
         clearPreview();
         refreshNodeCards();
@@ -1210,7 +1211,7 @@ import { createTowerRewardPool, drawRewards } from './src/game/rewards.js';
     refreshRoute();
     gold = 150; lives = 20; wave = 0; waveInProgress = false; gameOver = false; awaitingReward = false;
     spawnQueue = []; spawnTimer = 0;
-    availableTowerKeys = new Set(Object.keys(TOWER_TYPES));
+    inventory = {tower: Object.fromEntries(Object.keys(TOWER_TYPES).map((key) => [key, 1]))};
     currentRewards = [];
     selectedTowerType = null; clearPreview(); deselectTower();
     updateGoldUI(); updateLivesUI(); updateWaveUI(); refreshWaveButton(); refreshNodeCards();
@@ -1237,7 +1238,7 @@ import { createTowerRewardPool, drawRewards } from './src/game/rewards.js';
         towers: towers.length,
         previewVisible: Boolean(previewMesh),
         enemies: enemies.length,
-        inventory: [...availableTowerKeys], awaitingReward,
+        inventory: {...inventory.tower}, awaitingReward,
         rewardChoices: currentRewards.map((reward) => reward.key)
       };
     },
