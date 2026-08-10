@@ -178,7 +178,7 @@
         <button id="purgeBtn">PURGE NODE ( +<span id="purgeRefund">0</span> )</button>
       </div>
     </div>
-    <div id="hint">LEFT-CLICK: place/remove wall or select node &nbsp;·&nbsp; RIGHT-DRAG: rotate view &nbsp;·&nbsp; SCROLL: zoom</div>
+    <div id="hint">LEFT-DRAG: place walls · RIGHT-DRAG: remove walls · CLICK: select node &nbsp;·&nbsp; SCROLL: zoom</div>
   </div>
 
   <div id="overlay" class="hidden">
@@ -912,7 +912,7 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
   --------------------------------------------------------------------- */
   const raycaster = new THREE.Raycaster();
   const mouseNDC = new THREE.Vector2();
-  let isOrbiting = false, lastX=0, lastY=0;
+  let wallEditAction = null, lastEditedCellKey = null;
 
   function setMouseFromEvent(e){
     const rect = canvas.getBoundingClientRect();
@@ -922,9 +922,37 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
 
   canvas.addEventListener('contextmenu', e=> e.preventDefault());
 
+  function getCellAtPointer(e){
+    setMouseFromEvent(e);
+    raycaster.setFromCamera(mouseNDC, camera);
+    const cellHits = raycaster.intersectObjects(cellMeshList);
+    return cellHits.length ? cellHits[0].object.userData : null;
+  }
+
+  function editWallCell(gx, gy, action){
+    const key = cellKey(gx, gy);
+    if(key === lastEditedCellKey) return;
+    lastEditedCellKey = key;
+    const wallOptions = {gx, gy, walls: wallSet, occupied: occupiedSet, gridW: GRID_W, gridH: GRID_H, start: startCell, end: endCell};
+    if(action === 'remove'){
+      if(!wallSet.has(key)) return;
+      const removal = canRemoveWall(wallOptions);
+      if(removal.ok) removeWall(gx, gy);
+      return;
+    }
+    if(wallSet.has(key)) return;
+    const placement = canPlaceWall(wallOptions);
+    if(placement.ok) placeWall(gx, gy);
+  }
+
   canvas.addEventListener('pointerdown', (e)=>{
     if(e.button === 2){
-      isOrbiting = true; lastX=e.clientX; lastY=e.clientY;
+      if(!gameOver){
+        wallEditAction = 'remove';
+        lastEditedCellKey = null;
+        const cell = getCellAtPointer(e);
+        if(cell) editWallCell(cell.gx, cell.gy, wallEditAction);
+      }
       return;
     }
     if(e.button !== 0 || gameOver) return;
@@ -961,6 +989,8 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
         return;
       }
     } else {
+      wallEditAction = 'place';
+      lastEditedCellKey = null;
       const cellHits = raycaster.intersectObjects(cellMeshList);
       if(cellHits.length){
         const {gx, gy} = cellHits[0].object.userData;
@@ -970,22 +1000,7 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
           selectTower(towerOnCell);
           return;
         }
-        const wallOptions = {gx, gy, walls: wallSet, occupied: occupiedSet, gridW: GRID_W, gridH: GRID_H, start: startCell, end: endCell};
-        if(wallSet.has(key)){
-          const removal = canRemoveWall(wallOptions);
-          if(!removal.ok){
-            showMessage('REMOVE NODE FROM WALL FIRST');
-            return;
-          }
-          removeWall(gx, gy);
-          return;
-        }
-        const placement = canPlaceWall(wallOptions);
-        if(!placement.ok){
-          showMessage(placement.reason === 'no-route' ? 'WALL WOULD SEAL THE ROUTE' : 'CANNOT PLACE WALL HERE');
-          return;
-        }
-        placeWall(gx, gy);
+        editWallCell(gx, gy, 'place');
         return;
       }
       deselectTower();
@@ -993,11 +1008,9 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
   });
 
   window.addEventListener('pointermove', (e)=>{
-    if(isOrbiting){
-      const dx = e.clientX-lastX, dy = e.clientY-lastY;
-      lastX=e.clientX; lastY=e.clientY;
-      camAzimuth -= dx*0.006;
-      camElevation = Math.min(1.35, Math.max(0.35, camElevation - dy*0.006));
+    if(wallEditAction){
+      const cell = getCellAtPointer(e);
+      if(cell) editWallCell(cell.gx, cell.gy, wallEditAction);
       return;
     }
     if(!selectedTowerType) return;
@@ -1020,7 +1033,10 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
       }
     }
   });
-  window.addEventListener('pointerup', ()=>{ isOrbiting=false; });
+  window.addEventListener('pointerup', ()=>{
+    wallEditAction = null;
+    lastEditedCellKey = null;
+  });
 
   canvas.addEventListener('wheel', (e)=>{
     e.preventDefault();
