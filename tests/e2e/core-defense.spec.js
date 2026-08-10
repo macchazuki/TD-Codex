@@ -91,5 +91,5 @@ test('shows three reward choices and adds the selected tower to inventory', asyn
   await page.locator('#rewardCards .reward-card').first().click();
 
   await expect(page.locator('#rewardOverlay')).toBeHidden();
-  await expect.poll(() => page.evaluate((key) => window.__CORE_DEFENSE__.getSceneState().inventory[key] > 1, rewardKey)).toBe(true);
+  await expect.poll(() => page.evaluate((key) => window.__CORE_DEFENSE__.getSceneState().inventory.filter((itemKey) => itemKey === key).length, rewardKey)).toBe(2);
 });

@@ -12,19 +12,21 @@ describe('rewards', () => {
     expect(drawRewards([{key: 'a'}], 3, () => 0)).toEqual([{key: 'a'}]);
   });
 
-  it('adds generic rewards to typed inventory buckets', () => {
-    const inventory = {};
+  it('adds each reward as a separate inventory item', () => {
+    const inventory = {tower: []};
     addRewardToInventory(inventory, {type: 'tower', key: 'filter'});
     addRewardToInventory(inventory, {type: 'tower', key: 'filter'});
-    addRewardToInventory(inventory, {type: 'gold', key: 'small'});
 
     expect(inventoryCount(inventory, 'tower', 'filter')).toBe(2);
-    expect(inventoryCount(inventory, 'gold', 'small')).toBe(1);
+    expect(inventory.tower).toHaveLength(2);
+    expect(inventory.tower[0]).not.toBe(inventory.tower[1]);
   });
 
   it('removes one inventory copy only when available', () => {
-    const inventory = {tower: {filter: 1}};
+    const inventory = {tower: [{type: 'tower', key: 'filter'}, {type: 'tower', key: 'filter'}]};
 
+    expect(removeFromInventory(inventory, 'tower', 'filter')).toBe(true);
+    expect(inventoryCount(inventory, 'tower', 'filter')).toBe(1);
     expect(removeFromInventory(inventory, 'tower', 'filter')).toBe(true);
     expect(removeFromInventory(inventory, 'tower', 'filter')).toBe(false);
     expect(inventoryCount(inventory, 'tower', 'filter')).toBe(0);
