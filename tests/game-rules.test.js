@@ -8,7 +8,6 @@ import {
   enemyHealth,
   findPath,
   generateWave,
-  towerRefund
 } from '../src/game/rules.js';
 
 describe('game rules', () => {
@@ -19,12 +18,11 @@ describe('game rules', () => {
     expect(generateWave(5)).toContain('trojan');
   });
 
-  it('validates tower placement and costs', () => {
+  it('validates free tower placement on walls', () => {
     expect(cellKey(2, 3)).toBe('2,3');
-    expect(canPlaceTower({gx: 2, gy: 3, isWall: true, occupied: new Set(), gold: 150, typeKey: 'filter'}).ok).toBe(true);
-    expect(canPlaceTower({gx: 2, gy: 3, isWall: false, occupied: new Set(), gold: 150, typeKey: 'filter'}).reason).toBe('wall');
-    expect(canPlaceTower({gx: 2, gy: 3, isWall: true, occupied: new Set(['2,3']), gold: 150, typeKey: 'filter'}).reason).toBe('occupied');
-    expect(canPlaceTower({gx: 2, gy: 3, isWall: true, occupied: new Set(), gold: 10, typeKey: 'filter'}).reason).toBe('insufficient-gold');
+    expect(canPlaceTower({gx: 2, gy: 3, isWall: true, occupied: new Set(), typeKey: 'filter'})).toEqual({ok: true});
+    expect(canPlaceTower({gx: 2, gy: 3, isWall: false, occupied: new Set(), typeKey: 'filter'}).reason).toBe('wall');
+    expect(canPlaceTower({gx: 2, gy: 3, isWall: true, occupied: new Set(['2,3']), typeKey: 'filter'}).reason).toBe('occupied');
   });
 
   it('places and removes walls without currency', () => {
@@ -42,10 +40,9 @@ describe('game rules', () => {
     expect(canPlaceWall({gx: 1, gy: 1, walls: new Set(['1,0', '0,1', '1,2', '2,1']), occupied: new Set(), gridW: 3, gridH: 3, start: {gx: 0, gy: 0}, end: {gx: 2, gy: 2}}).reason).toBe('no-route');
   });
 
-  it('scales enemy health and refunds 60 percent of tower cost', () => {
+  it('scales enemy health', () => {
     expect(enemyHealth('worm', 1)).toBe(40);
     expect(enemyHealth('worm', 5)).toBeCloseTo(65.6);
-    expect(towerRefund('purge')).toBe(66);
   });
 
   it('only starts an eligible wave', () => {
