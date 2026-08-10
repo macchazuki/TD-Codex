@@ -178,7 +178,7 @@
         <button id="purgeBtn">PURGE NODE ( +<span id="purgeRefund">0</span> )</button>
       </div>
     </div>
-    <div id="hint">LEFT-CLICK: place / select node &nbsp;·&nbsp; RIGHT-DRAG: rotate view &nbsp;·&nbsp; SCROLL: zoom</div>
+    <div id="hint">LEFT-CLICK: place/remove wall or select node &nbsp;·&nbsp; RIGHT-DRAG: rotate view &nbsp;·&nbsp; SCROLL: zoom</div>
   </div>
 
   <div id="overlay" class="hidden">
@@ -192,8 +192,8 @@
 
 <script type="module">
 import * as THREE from 'three';
-import { CELL, ENEMY_TYPES, GRID_H, GRID_W, MAX_WAVE, TOWER_TYPES, WAYPOINTS } from './src/game/config.js';
-import { canPlaceTower, canStartWave, enemyHealth, generateWave, towerRefund } from './src/game/rules.js';
+import { CELL, ENEMY_TYPES, GRID_H, GRID_W, MAX_WAVE, TOWER_TYPES } from './src/game/config.js';
+import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enemyHealth, findPath, generateWave, towerRefund } from './src/game/rules.js';
 
 (function(){
   "use strict";
@@ -209,7 +209,9 @@ import { canPlaceTower, canStartWave, enemyHealth, generateWave, towerRefund } f
   let selectedTower = null;
   let spawnQueue = [], spawnTimer = 0;
   let towers = [], enemies = [], projectiles = [], effects = [], pulses = [];
-  let occupiedSet = new Set(), pathSet = new Set();
+  let occupiedSet = new Set(), wallSet = new Set(), pathSet = new Set(), pathSetRoute = [];
+  const startCell = {gx: 0, gy: 1};
+  const endCell = {gx: GRID_W - 1, gy: 6};
   let worldWaypoints = [], segLengths = [], pathTotalLength = 0;
 
   /* ---------------------------------------------------------------------
@@ -275,7 +277,7 @@ import { canPlaceTower, canStartWave, enemyHealth, generateWave, towerRefund } f
   }
 
   function buildPathMath(){
-    worldWaypoints = WAYPOINTS.map(w => gridToWorld(w.x, w.y));
+    worldWaypoints = [gridToWorld(-1, startCell.gy), ...pathSetRoute.map(cell => gridToWorld(cell.gx, cell.gy)), gridToWorld(GRID_W, endCell.gy)];
     segLengths = [];
     pathTotalLength = 0;
     for(let i=0;i<worldWaypoints.length-1;i++){
@@ -299,39 +301,43 @@ import { canPlaceTower, canStartWave, enemyHealth, generateWave, towerRefund } f
   }
 
   function markPathCells(){
-    pathSet = new Set();
-    for(let i=0;i<WAYPOINTS.length-1;i++){
-      const a = WAYPOINTS[i], b = WAYPOINTS[i+1];
-      if(a.y === b.y){
-        const x0=Math.min(a.x,b.x), x1=Math.max(a.x,b.x);
-        for(let x=Math.ceil(x0); x<=Math.floor(x1); x++){
-          if(x>=0 && x<GRID_W && a.y>=0 && a.y<GRID_H) pathSet.add(x+','+a.y);
-        }
-      } else if(a.x === b.x){
-        const y0=Math.min(a.y,b.y), y1=Math.max(a.y,b.y);
-        for(let y=Math.ceil(y0); y<=Math.floor(y1); y++){
-          if(a.x>=0 && a.x<GRID_W && y>=0 && y<GRID_H) pathSet.add(a.x+','+y);
-        }
-      }
-    }
+    pathSetRoute = findPath({gridW: GRID_W, gridH: GRID_H, start: startCell, end: endCell, blocked: wallSet}) || [];
+    pathSet = new Set(pathSetRoute.map(({gx, gy}) => cellKey(gx, gy)));
   }
 
-  buildPathMath();
+  function getPointOnRoute(route, lengths, totalLength, dist){
+    dist = Math.max(0, Math.min(dist, totalLength));
+    let acc = 0;
+    for(let i = 0; i < lengths.length; i += 1){
+      if(dist <= acc + lengths[i] || i === lengths.length - 1){
+        const ratio = lengths[i] > 0 ? Math.min(Math.max((dist - acc) / lengths[i], 0), 1) : 0;
+        return new THREE.Vector3().lerpVectors(route[i], route[i + 1], ratio);
+      }
+      acc += lengths[i];
+    }
+    return route[route.length - 1].clone();
+  }
+
   markPathCells();
+  buildPathMath();
 
   /* ---------------------------------------------------------------------
      GROUND CELLS
   --------------------------------------------------------------------- */
   const groundGroup = new THREE.Group();
   scene.add(groundGroup);
+  const wallGroup = new THREE.Group();
+  scene.add(wallGroup);
   const cellMeshList = [];
   const cellMeshMap = {};
+  const wallMeshMap = {};
 
   const buildableMat = new THREE.MeshStandardMaterial({color:0x172743, emissive:0x07101e, emissiveIntensity:0.7, roughness:0.85, metalness:0.1});
   const buildableHoverOkMat = new THREE.MeshStandardMaterial({color:0x123322, emissive:0x0d5c2f, emissiveIntensity:0.6, roughness:0.7});
   const buildableHoverBadMat = new THREE.MeshStandardMaterial({color:0x331515, emissive:0x7a1020, emissiveIntensity:0.6, roughness:0.7});
   const pathMat = new THREE.MeshStandardMaterial({color:0x0d3042, emissive:0x005d74, emissiveIntensity:0.9, roughness:0.6});
   const occupiedMat = new THREE.MeshStandardMaterial({color:0x161f30, roughness:0.9});
+  const wallMat = new THREE.MeshStandardMaterial({color:0xff9500, emissive:0x7a3c00, emissiveIntensity:0.8, roughness:0.55, metalness:0.5});
 
   const cellGeo = new THREE.BoxGeometry(CELL*0.9, 0.2, CELL*0.9);
 
@@ -354,9 +360,38 @@ import { canPlaceTower, canStartWave, enemyHealth, generateWave, towerRefund } f
     const key = gx+','+gy;
     const mesh = cellMeshMap[key];
     if(!mesh) return;
+    if(wallSet.has(key)){ mesh.material = occupiedMat; return; }
     if(pathSet.has(key)){ mesh.material = pathMat; return; }
     if(occupiedSet.has(key)){ mesh.material = occupiedMat; return; }
     mesh.material = buildableMat;
+  }
+
+  function refreshRoute(){
+    markPathCells();
+    buildPathMath();
+    cellMeshList.forEach(mesh => setCellVisual(mesh.userData.gx, mesh.userData.gy));
+  }
+
+  function placeWall(gx, gy){
+    const key = cellKey(gx, gy);
+    wallSet.add(key);
+    const p = gridToWorld(gx, gy);
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(CELL * 0.72, 0.65, CELL * 0.72), wallMat.clone());
+    mesh.position.set(p.x, 0.42, p.z);
+    mesh.castShadow = true;
+    mesh.userData = {gx, gy};
+    wallGroup.add(mesh);
+    wallMeshMap[key] = mesh;
+    refreshRoute();
+  }
+
+  function removeWall(gx, gy){
+    const key = cellKey(gx, gy);
+    const mesh = wallMeshMap[key];
+    if(mesh) wallGroup.remove(mesh);
+    delete wallMeshMap[key];
+    wallSet.delete(key);
+    refreshRoute();
   }
 
   /* ---------------------------------------------------------------------
@@ -555,7 +590,9 @@ import { canPlaceTower, canStartWave, enemyHealth, generateWave, towerRefund } f
       typeKey, type, mesh, barGroup, fg,
       hp: enemyHealth(typeKey, waveNum), maxHp: enemyHealth(typeKey, waveNum),
       speed: type.speed, traveled: 0, alive: true, phase: Math.random()*10,
-      goldValue: type.gold, lifeDamage: type.dmg
+      goldValue: type.gold, lifeDamage: type.dmg,
+      route: worldWaypoints.map(point => point.clone()),
+      routeLengths: segLengths.slice(), routeTotalLength: pathTotalLength
     };
     enemies.push(enemy);
     return enemy;
@@ -648,7 +685,7 @@ import { canPlaceTower, canStartWave, enemyHealth, generateWave, towerRefund } f
     for(const enemy of enemies){
       if(!enemy.alive) continue;
       enemy.traveled += enemy.speed*dt;
-      if(enemy.traveled >= pathTotalLength){
+      if(enemy.traveled >= enemy.routeTotalLength){
         lives -= enemy.lifeDamage;
         updateLivesUI();
         enemy.alive = false;
@@ -656,7 +693,7 @@ import { canPlaceTower, canStartWave, enemyHealth, generateWave, towerRefund } f
         if(lives <= 0){ triggerLoss(); }
         continue;
       }
-      const p = getPointOnPath(enemy.traveled);
+      const p = getPointOnRoute(enemy.route, enemy.routeLengths, enemy.routeTotalLength, enemy.traveled);
       const bob = Math.sin(t*4 + enemy.phase)*0.08;
       enemy.mesh.position.set(p.x, 0.5+bob, p.z);
       enemy.mesh.rotation.y += dt*1.6;
@@ -902,12 +939,12 @@ import { canPlaceTower, canStartWave, enemyHealth, generateWave, towerRefund } f
     if(selectedTowerType){
       const cellHits = raycaster.intersectObjects(cellMeshList);
       if(cellHits.length){
-        const {gx, gy, isPath} = cellHits[0].object.userData;
+        const {gx, gy} = cellHits[0].object.userData;
         const key = gx+','+gy;
         const cfg = TOWER_TYPES[selectedTowerType];
-        const placement = canPlaceTower({gx, gy, isPath, occupied: occupiedSet, gold, typeKey: selectedTowerType});
+        const placement = canPlaceTower({gx, gy, isWall: wallSet.has(key), occupied: occupiedSet, gold, typeKey: selectedTowerType});
         if(!placement.ok){
-          const messages = {path:'CANNOT DEPLOY ON DATA PATH', occupied:'NODE SLOT OCCUPIED', 'insufficient-gold':'INSUFFICIENT CYCLES'};
+          const messages = {wall:'DEPLOY A WALL FIRST', occupied:'NODE SLOT OCCUPIED', 'insufficient-gold':'INSUFFICIENT CYCLES'};
           showMessage(messages[placement.reason] || 'INVALID NODE DEPLOYMENT');
           return;
         }
@@ -917,6 +954,27 @@ import { canPlaceTower, canStartWave, enemyHealth, generateWave, towerRefund } f
         return;
       }
     } else {
+      const cellHits = raycaster.intersectObjects(cellMeshList);
+      if(cellHits.length){
+        const {gx, gy} = cellHits[0].object.userData;
+        const wallOptions = {gx, gy, walls: wallSet, occupied: occupiedSet, gridW: GRID_W, gridH: GRID_H, start: startCell, end: endCell};
+        if(wallSet.has(cellKey(gx, gy))){
+          const removal = canRemoveWall(wallOptions);
+          if(!removal.ok){
+            showMessage('REMOVE NODE FROM WALL FIRST');
+            return;
+          }
+          removeWall(gx, gy);
+          return;
+        }
+        const placement = canPlaceWall(wallOptions);
+        if(!placement.ok){
+          showMessage(placement.reason === 'no-route' ? 'WALL WOULD SEAL THE ROUTE' : 'CANNOT PLACE WALL HERE');
+          return;
+        }
+        placeWall(gx, gy);
+        return;
+      }
       deselectTower();
     }
   });
@@ -934,12 +992,12 @@ import { canPlaceTower, canStartWave, enemyHealth, generateWave, towerRefund } f
     raycaster.setFromCamera(mouseNDC, camera);
     const cellHits = raycaster.intersectObjects(cellMeshList);
     if(cellHits.length){
-      const {gx, gy, isPath} = cellHits[0].object.userData;
+      const {gx, gy} = cellHits[0].object.userData;
       const key = gx+','+gy;
       if(key !== hoveredCellKey){
         hoveredCellKey = key;
         const cfg = TOWER_TYPES[selectedTowerType];
-        const valid = !isPath && !occupiedSet.has(key);
+        const valid = wallSet.has(key) && !occupiedSet.has(key);
         const p = gridToWorld(gx,gy);
         ensurePreview(cfg);
         previewMesh.position.set(p.x,0,p.z);
@@ -996,6 +1054,10 @@ import { canPlaceTower, canStartWave, enemyHealth, generateWave, towerRefund } f
     projectiles = [];
     effects.forEach(fx=>scene.remove(fx.mesh));
     effects = [];
+    Object.values(wallMeshMap).forEach(mesh => wallGroup.remove(mesh));
+    wallSet.clear();
+    Object.keys(wallMeshMap).forEach(key => delete wallMeshMap[key]);
+    refreshRoute();
     gold = 150; lives = 20; wave = 0; waveInProgress = false; gameOver = false;
     spawnQueue = []; spawnTimer = 0;
     selectedTowerType = null; clearPreview(); deselectTower();
@@ -1012,6 +1074,8 @@ import { canPlaceTower, canStartWave, enemyHealth, generateWave, towerRefund } f
         renderStatus: canvas.dataset.renderStatus || 'unknown',
         renderCalls: renderer.info.render.calls,
         mapCells: cellMeshList.length,
+        walls: wallSet.size,
+        routeCells: pathSetRoute.length,
         towers: towers.length,
         enemies: enemies.length
       };
