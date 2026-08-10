@@ -212,6 +212,7 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
   let occupiedSet = new Set(), wallSet = new Set(), pathSet = new Set(), pathSetRoute = [];
   const startCell = {gx: 0, gy: 1};
   const endCell = {gx: GRID_W - 1, gy: 6};
+  const WALL_TOP = 0.78;
   let worldWaypoints = [], segLengths = [], pathTotalLength = 0;
 
   /* ---------------------------------------------------------------------
@@ -508,7 +509,7 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
     const cfg = TOWER_TYPES[typeKey];
     const group = buildTowerMesh(cfg);
     const p = gridToWorld(gx,gy);
-    group.position.set(p.x, 0, p.z);
+    group.position.set(p.x, WALL_TOP, p.z);
     towersGroup.add(group);
 
     const tower = {
@@ -875,6 +876,7 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
     refreshNodeCards();
     const ring = makeRangeRing(tower.range, tower.cfg.color);
     ring.position.x = tower.group.position.x;
+    ring.position.y = WALL_TOP + 0.02;
     ring.position.z = tower.group.position.z;
     scene.add(ring);
     tower.rangeRing = ring;
@@ -941,6 +943,11 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
       if(cellHits.length){
         const {gx, gy} = cellHits[0].object.userData;
         const key = gx+','+gy;
+        const towerOnCell = towers.find(tower => cellKey(tower.gx, tower.gy) === key);
+        if(towerOnCell){
+          selectTower(towerOnCell);
+          return;
+        }
         const cfg = TOWER_TYPES[selectedTowerType];
         const placement = canPlaceTower({gx, gy, isWall: wallSet.has(key), occupied: occupiedSet, gold, typeKey: selectedTowerType});
         if(!placement.ok){
@@ -957,8 +964,14 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
       const cellHits = raycaster.intersectObjects(cellMeshList);
       if(cellHits.length){
         const {gx, gy} = cellHits[0].object.userData;
+        const key = cellKey(gx, gy);
+        const towerOnCell = towers.find(tower => cellKey(tower.gx, tower.gy) === key);
+        if(towerOnCell){
+          selectTower(towerOnCell);
+          return;
+        }
         const wallOptions = {gx, gy, walls: wallSet, occupied: occupiedSet, gridW: GRID_W, gridH: GRID_H, start: startCell, end: endCell};
-        if(wallSet.has(cellKey(gx, gy))){
+        if(wallSet.has(key)){
           const removal = canRemoveWall(wallOptions);
           if(!removal.ok){
             showMessage('REMOVE NODE FROM WALL FIRST');
@@ -1000,8 +1013,8 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
         const valid = wallSet.has(key) && !occupiedSet.has(key);
         const p = gridToWorld(gx,gy);
         ensurePreview(cfg);
-        previewMesh.position.set(p.x,0,p.z);
-        previewRing.position.set(p.x,0.05,p.z);
+        previewMesh.position.set(p.x,WALL_TOP,p.z);
+        previewRing.position.set(p.x,WALL_TOP + 0.02,p.z);
         previewMesh.traverse(o=>{ if(o.material) o.material.opacity = valid?0.6:0.25; });
         previewRing.material.color.set(valid ? cfg.color : 0xff3b5c);
       }
