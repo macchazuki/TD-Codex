@@ -884,7 +884,6 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
           selectedTowerType = cfg.key;
           deselectTower();
           clearPreview();
-          ensurePreview(cfg);
         }
         refreshNodeCards();
       });
@@ -1060,6 +1059,10 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
     setMouseFromEvent(e);
     raycaster.setFromCamera(mouseNDC, camera);
     const cellHits = raycaster.intersectObjects(cellMeshList);
+    if(!cellHits.length){
+      clearPreview();
+      return;
+    }
     if(cellHits.length){
       const {gx, gy} = cellHits[0].object.userData;
       const key = gx+','+gy;
@@ -1154,6 +1157,7 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
         enemyPositions: enemies.map(enemy => [enemy.mesh.position.x, enemy.mesh.position.z]),
         enemyRouteStarts: enemies.map(enemy => [enemy.route[0].x, enemy.route[0].z]),
         towers: towers.length,
+        previewVisible: Boolean(previewMesh),
         enemies: enemies.length
       };
     },

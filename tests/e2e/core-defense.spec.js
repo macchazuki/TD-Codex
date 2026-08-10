@@ -49,6 +49,10 @@ test('starts a wave after selecting a tower', async ({page}) => {
   const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
   await page.mouse.click(cell.x, cell.y);
   await page.locator('#nodeCards .node-card').first().click();
+  await page.mouse.move(0, 0);
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().previewVisible)).toBe(false);
+  await page.mouse.move(cell.x, cell.y);
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().previewVisible)).toBe(true);
   await page.mouse.click(cell.x, cell.y);
 
   await page.locator('#waveBtn').click();
