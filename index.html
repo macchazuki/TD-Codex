@@ -210,6 +210,7 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
   let spawnQueue = [], spawnTimer = 0;
   let towers = [], enemies = [], projectiles = [], effects = [], pulses = [];
   let occupiedSet = new Set(), wallSet = new Set(), pathSet = new Set(), pathSetRoute = [];
+  let routeVersion = 0;
   const startCell = {gx: 0, gy: 1};
   const endCell = {gx: GRID_W - 1, gy: 6};
   const WALL_TOP = 0.78;
@@ -319,6 +320,48 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
     return route[route.length - 1].clone();
   }
 
+  function getRouteMetrics(route){
+    const lengths = [];
+    let total = 0;
+    for(let index = 0; index < route.length - 1; index += 1){
+      const length = route[index].distanceTo(route[index + 1]);
+      lengths.push(length);
+      total += length;
+    }
+    return {lengths, total};
+  }
+
+  function getGridCellFromWorld(position){
+    return {
+      gx: Math.min(GRID_W - 1, Math.max(0, Math.round(position.x / CELL + (GRID_W - 1) / 2))),
+      gy: Math.min(GRID_H - 1, Math.max(0, Math.round(position.z / CELL + (GRID_H - 1) / 2)))
+    };
+  }
+
+  function rebuildEnemyRoute(enemy){
+    const currentPosition = new THREE.Vector3(enemy.mesh.position.x, 0, enemy.mesh.position.z);
+    const currentCell = getGridCellFromWorld(currentPosition);
+    const remainingCells = findPath({
+      gridW: GRID_W,
+      gridH: GRID_H,
+      start: currentCell,
+      end: endCell,
+      blocked: wallSet
+    });
+    if(!remainingCells) return;
+    const futurePoints = remainingCells
+      .slice(1)
+      .map(cell => gridToWorld(cell.gx, cell.gy));
+    futurePoints.push(gridToWorld(GRID_W, endCell.gy));
+    const route = [currentPosition, ...futurePoints];
+    const metrics = getRouteMetrics(route);
+    enemy.route = route;
+    enemy.routeLengths = metrics.lengths;
+    enemy.routeTotalLength = metrics.total;
+    enemy.traveled = 0;
+    enemy.routeVersion = routeVersion;
+  }
+
   markPathCells();
   buildPathMath();
 
@@ -370,6 +413,11 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
   function refreshRoute(){
     markPathCells();
     buildPathMath();
+    routeVersion += 1;
+    enemies.forEach(enemy => {
+      if(!enemy.alive) return;
+      rebuildEnemyRoute(enemy);
+    });
     cellMeshList.forEach(mesh => setCellVisual(mesh.userData.gx, mesh.userData.gy));
   }
 
@@ -593,7 +641,7 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
       speed: type.speed, traveled: 0, alive: true, phase: Math.random()*10,
       goldValue: type.gold, lifeDamage: type.dmg,
       route: worldWaypoints.map(point => point.clone()),
-      routeLengths: segLengths.slice(), routeTotalLength: pathTotalLength
+      routeLengths: segLengths.slice(), routeTotalLength: pathTotalLength, routeVersion
     };
     enemies.push(enemy);
     return enemy;
@@ -1105,6 +1153,10 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
         mapCells: cellMeshList.length,
         walls: wallSet.size,
         routeCells: pathSetRoute.length,
+        routeVersion,
+        enemyRouteVersions: enemies.map(enemy => enemy.routeVersion),
+        enemyPositions: enemies.map(enemy => [enemy.mesh.position.x, enemy.mesh.position.z]),
+        enemyRouteStarts: enemies.map(enemy => [enemy.route[0].x, enemy.route[0].z]),
         towers: towers.length,
         enemies: enemies.length
       };
