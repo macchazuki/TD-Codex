@@ -1,0 +1,22 @@
+{
+  "name": "td-codex",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node node_modules/vite/bin/vite.js --host 0.0.0.0",
+    "build": "node node_modules/vite/bin/vite.js build",
+    "preview": "node node_modules/vite/bin/vite.js preview --host 0.0.0.0",
+    "test": "node node_modules/vitest/vitest.mjs run",
+    "test:watch": "node node_modules/vitest/vitest.mjs",
+    "test:e2e": "node node_modules/@playwright/test/cli.js test"
+  },
+  "dependencies": {
+    "three": "^0.128.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "vite": "^7.1.0",
+    "vitest": "^3.2.4"
+  }
+}

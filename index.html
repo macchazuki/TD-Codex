@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CORE://DEFENSE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #060a14;
+    --panel: rgba(10,16,30,0.86);
+    --panel-border: #1b2c46;
+    --cyan: #00e5ff;
+    --amber: #ff9500;
+    --magenta: #d926ff;
+    --danger: #ff3b5c;
+    --text: #cfe6f2;
+    --text-dim: #6f8aa8;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{width:100%; height:100%; overflow:hidden; background:var(--bg); font-family:'Space Mono',monospace; color:var(--text);}
+  #app{position:relative; width:100vw; height:100vh;}
+  canvas{display:block; width:100%; height:100%;}
+
+  .brackets{
+    position:relative;
+  }
+  .brackets::before, .brackets::after{
+    content:''; position:absolute; width:14px; height:14px; border-color:var(--cyan); opacity:0.7;
+  }
+  .brackets::before{ top:-1px; left:-1px; border-top:2px solid; border-left:2px solid;}
+  .brackets::after{ bottom:-1px; right:-1px; border-bottom:2px solid; border-right:2px solid;}
+
+  #hud{position:absolute; inset:0; pointer-events:none; display:flex; flex-direction:column; justify-content:space-between;}
+
+  .hud-top{
+    pointer-events:auto;
+    display:flex; align-items:center; gap:18px;
+    margin:14px 14px 0 14px;
+    padding:10px 18px;
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    backdrop-filter:blur(6px);
+  }
+  .brand{
+    font-family:'Orbitron',sans-serif; font-weight:900; letter-spacing:2px; font-size:18px;
+    color:var(--cyan); text-shadow:0 0 12px rgba(0,229,255,0.55);
+    white-space:nowrap;
+  }
+  .brand span{color:var(--text-dim); font-weight:500;}
+  .stats{display:flex; gap:22px; flex:1; justify-content:center; flex-wrap:wrap;}
+  .stat{display:flex; align-items:baseline; gap:6px; font-size:13px; color:var(--text-dim);}
+  .stat .glyph{font-size:15px;}
+  .stat span{font-family:'Orbitron',sans-serif; font-weight:700; font-size:16px; color:var(--text);}
+  .stat.cycles .glyph{color:var(--amber);}
+  .stat.cycles span{color:var(--amber);}
+  .stat.integrity .glyph{color:var(--danger);}
+  .stat.integrity span{color:var(--danger);}
+  .stat.wave .glyph{color:var(--cyan);}
+  .stat.wave span{color:var(--cyan);}
+  .stat label{font-size:10px; letter-spacing:1.5px; color:var(--text-dim);}
+
+  #waveBtn{
+    font-family:'Orbitron',sans-serif; font-weight:700; letter-spacing:1.5px; font-size:12px;
+    background:linear-gradient(180deg, rgba(0,229,255,0.18), rgba(0,229,255,0.05));
+    border:1px solid var(--cyan); color:var(--cyan);
+    padding:10px 18px; cursor:pointer; white-space:nowrap;
+    transition:all .15s ease; text-shadow:0 0 8px rgba(0,229,255,0.6);
+  }
+  #waveBtn:hover:not(:disabled){background:rgba(0,229,255,0.25); box-shadow:0 0 16px rgba(0,229,255,0.35);}
+  #waveBtn:disabled{opacity:0.35; cursor:not-allowed; color:var(--text-dim); border-color:var(--panel-border); text-shadow:none;}
+
+  .hud-bottom{
+    pointer-events:auto;
+    display:flex; align-items:flex-end; justify-content:space-between; gap:14px;
+    margin:0 14px 14px 14px;
+  }
+
+  #nodeCards{display:flex; gap:10px; flex-wrap:wrap;}
+  .node-card{
+    width:150px;
+    background:var(--panel); border:1px solid var(--panel-border);
+    backdrop-filter:blur(6px);
+    padding:10px 12px; cursor:pointer; transition:all .15s ease;
+  }
+  .node-card:hover{border-color:var(--text-dim);}
+  .node-card.active{border-color:var(--cyan); box-shadow:0 0 14px rgba(0,229,255,0.3); background:rgba(0,229,255,0.06);}
+  .node-card.disabled{opacity:0.4; cursor:not-allowed;}
+  .node-icon{width:22px; height:22px; margin-bottom:8px;}
+  .node-name{font-family:'Orbitron',sans-serif; font-size:12px; font-weight:700; letter-spacing:0.5px; margin-bottom:4px;}
+  .node-cost{font-size:11px; color:var(--amber);}
+  .node-desc{font-size:10px; color:var(--text-dim); margin-top:6px; line-height:1.4;}
+
+  #selectedPanel{
+    width:210px;
+    background:var(--panel); border:1px solid var(--panel-border);
+    backdrop-filter:blur(6px);
+    padding:12px 14px;
+  }
+  #selectedPanel.hidden{display:none;}
+  #selectedPanel h3{font-family:'Orbitron',sans-serif; font-size:13px; letter-spacing:1px; margin-bottom:8px;}
+  #selectedPanel .row{display:flex; justify-content:space-between; font-size:11px; color:var(--text-dim); margin-bottom:4px;}
+  #selectedPanel .row b{color:var(--text); font-weight:400;}
+  #purgeBtn{
+    margin-top:8px; width:100%; padding:8px; font-family:'Orbitron',sans-serif; font-size:11px; letter-spacing:1px;
+    background:rgba(255,59,92,0.08); border:1px solid var(--danger); color:var(--danger); cursor:pointer;
+  }
+  #purgeBtn:hover{background:rgba(255,59,92,0.2);}
+
+  #message{
+    position:absolute; top:70px; left:50%; transform:translateX(-50%);
+    font-family:'Orbitron',sans-serif; font-size:12px; letter-spacing:1.5px;
+    background:rgba(255,59,92,0.12); border:1px solid var(--danger); color:var(--danger);
+    padding:8px 16px; pointer-events:none; opacity:0; transition:opacity .2s ease;
+  }
+  #message.show{opacity:1;}
+
+  #hint{
+    position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+    font-size:10px; color:var(--text-dim); letter-spacing:0.5px; opacity:0.8; pointer-events:none;
+    text-align:center;
+  }
+
+  #overlay{
+    position:absolute; inset:0; background:rgba(4,6,12,0.86); backdrop-filter:blur(4px);
+    display:flex; align-items:center; justify-content:center; z-index:20;
+  }
+  #overlay.hidden{display:none;}
+  #overlayBox{
+    text-align:center; padding:40px 60px; border:1px solid var(--panel-border); background:var(--panel);
+  }
+  #overlayTitle{font-family:'Orbitron',sans-serif; font-size:32px; font-weight:900; letter-spacing:3px; margin-bottom:12px;}
+  #overlaySubtitle{font-size:12px; color:var(--text-dim); margin-bottom:22px; max-width:340px;}
+  #restartBtn{
+    font-family:'Orbitron',sans-serif; font-weight:700; letter-spacing:1.5px; font-size:12px;
+    background:rgba(0,229,255,0.1); border:1px solid var(--cyan); color:var(--cyan);
+    padding:12px 26px; cursor:pointer;
+  }
+  #restartBtn:hover{background:rgba(0,229,255,0.25); box-shadow:0 0 16px rgba(0,229,255,0.35);}
+
+  .hidden{display:none !important;}
+
+  @media (max-width:720px){
+    .hud-top{flex-wrap:wrap; gap:10px;}
+    .stats{gap:12px; order:3; width:100%; justify-content:space-around;}
+    .brand{font-size:14px;}
+    .node-card{width:110px;}
+    .node-desc{display:none;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="hud">
+    <div class="hud-top brackets">
+      <div class="brand">CORE<span>://</span>DEFENSE</div>
+      <div class="stats">
+        <div class="stat cycles"><span class="glyph">⬡</span><span id="goldVal">150</span><label>CYCLES</label></div>
+        <div class="stat integrity"><span class="glyph">◈</span><span id="livesVal">20</span><label>INTEGRITY</label></div>
+        <div class="stat wave"><span class="glyph">▣</span><span id="waveVal">0</span>/<span id="waveMax">10</span><label>WAVE</label></div>
+      </div>
+      <button id="waveBtn">INITIATE WAVE</button>
+    </div>
+
+    <div id="message"></div>
+
+    <div class="hud-bottom">
+      <div id="nodeCards" class="brackets"></div>
+      <div id="selectedPanel" class="hidden brackets">
+        <h3 id="selName">NODE</h3>
+        <div class="row"><span>DAMAGE</span><b id="selDmg">-</b></div>
+        <div class="row"><span>RANGE</span><b id="selRange">-</b></div>
+        <div class="row"><span>RATE</span><b id="selRate">-</b></div>
+        <div class="row"><span>KILLS</span><b id="selKills">-</b></div>
+        <button id="purgeBtn">PURGE NODE ( +<span id="purgeRefund">0</span> )</button>
+      </div>
+    </div>
+    <div id="hint">LEFT-CLICK: place / select node &nbsp;·&nbsp; RIGHT-DRAG: rotate view &nbsp;·&nbsp; SCROLL: zoom</div>
+  </div>
+
+  <div id="overlay" class="hidden">
+    <div id="overlayBox" class="brackets">
+      <div id="overlayTitle"></div>
+      <div id="overlaySubtitle"></div>
+      <button id="restartBtn">REINITIALIZE</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { CELL, ENEMY_TYPES, GRID_H, GRID_W, MAX_WAVE, TOWER_TYPES, WAYPOINTS } from './src/game/config.js';
+import { canPlaceTower, canStartWave, enemyHealth, generateWave, towerRefund } from './src/game/rules.js';
+
+(function(){
+  "use strict";
+
+  /* ---------------------------------------------------------------------
+     CONFIG
+  --------------------------------------------------------------------- */
+  /* ---------------------------------------------------------------------
+     STATE
+  --------------------------------------------------------------------- */
+  let gold = 150, lives = 20, wave = 0, waveInProgress = false, gameOver = false;
+  let selectedTowerType = null;
+  let selectedTower = null;
+  let spawnQueue = [], spawnTimer = 0;
+  let towers = [], enemies = [], projectiles = [], effects = [], pulses = [];
+  let occupiedSet = new Set(), pathSet = new Set();
+  let worldWaypoints = [], segLengths = [], pathTotalLength = 0;
+
+  /* ---------------------------------------------------------------------
+     THREE.JS SETUP
+  --------------------------------------------------------------------- */
+  const canvas = document.getElementById('gameCanvas');
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x060a14);
+  scene.fog = new THREE.FogExp2(0x060a14, 0.032);
+
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 200);
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  // camera orbit
+  let camAzimuth = 0.55, camElevation = 0.95, camDistance = 24;
+  const camTarget = new THREE.Vector3(0,0,0);
+  function updateCamera(){
+    camera.position.set(
+      camTarget.x + camDistance*Math.sin(camAzimuth)*Math.cos(camElevation),
+      camTarget.y + camDistance*Math.sin(camElevation),
+      camTarget.z + camDistance*Math.cos(camAzimuth)*Math.cos(camElevation)
+    );
+    camera.lookAt(camTarget);
+  }
+  updateCamera();
+
+  // lights
+  scene.add(new THREE.AmbientLight(0x223355, 0.75));
+  const sun = new THREE.DirectionalLight(0xaeefff, 1.0);
+  sun.position.set(14, 26, 10);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024,1024);
+  sun.shadow.camera.left = -20; sun.shadow.camera.right = 20;
+  sun.shadow.camera.top = 16; sun.shadow.camera.bottom = -16;
+  sun.shadow.camera.near = 1; sun.shadow.camera.far = 60;
+  scene.add(sun);
+
+  // faint grid helper for atmosphere
+  const gridHelper = new THREE.GridHelper(Math.max(GRID_W,GRID_H)*CELL+10, 30, 0x11304a, 0x0c1c30);
+  gridHelper.position.y = -0.35;
+  scene.add(gridHelper);
+
+  /* ---------------------------------------------------------------------
+     GRID / PATH HELPERS
+  --------------------------------------------------------------------- */
+  function gridToWorld(gx, gy){
+    return new THREE.Vector3((gx-(GRID_W-1)/2)*CELL, 0, (gy-(GRID_H-1)/2)*CELL);
+  }
+
+  function buildPathMath(){
+    worldWaypoints = WAYPOINTS.map(w => gridToWorld(w.x, w.y));
+    segLengths = [];
+    pathTotalLength = 0;
+    for(let i=0;i<worldWaypoints.length-1;i++){
+      const d = worldWaypoints[i].distanceTo(worldWaypoints[i+1]);
+      segLengths.push(d);
+      pathTotalLength += d;
+    }
+  }
+
+  function getPointOnPath(dist){
+    dist = Math.max(0, Math.min(dist, pathTotalLength));
+    let acc = 0;
+    for(let i=0;i<segLengths.length;i++){
+      if(dist <= acc+segLengths[i] || i === segLengths.length-1){
+        const t = segLengths[i] > 0 ? Math.min(Math.max((dist-acc)/segLengths[i],0),1) : 0;
+        return new THREE.Vector3().lerpVectors(worldWaypoints[i], worldWaypoints[i+1], t);
+      }
+      acc += segLengths[i];
+    }
+    return worldWaypoints[worldWaypoints.length-1].clone();
+  }
+
+  function markPathCells(){
+    pathSet = new Set();
+    for(let i=0;i<WAYPOINTS.length-1;i++){
+      const a = WAYPOINTS[i], b = WAYPOINTS[i+1];
+      if(a.y === b.y){
+        const x0=Math.min(a.x,b.x), x1=Math.max(a.x,b.x);
+        for(let x=Math.ceil(x0); x<=Math.floor(x1); x++){
+          if(x>=0 && x<GRID_W && a.y>=0 && a.y<GRID_H) pathSet.add(x+','+a.y);
+        }
+      } else if(a.x === b.x){
+        const y0=Math.min(a.y,b.y), y1=Math.max(a.y,b.y);
+        for(let y=Math.ceil(y0); y<=Math.floor(y1); y++){
+          if(a.x>=0 && a.x<GRID_W && y>=0 && y<GRID_H) pathSet.add(a.x+','+y);
+        }
+      }
+    }
+  }
+
+  buildPathMath();
+  markPathCells();
+
+  /* ---------------------------------------------------------------------
+     GROUND CELLS
+  --------------------------------------------------------------------- */
+  const groundGroup = new THREE.Group();
+  scene.add(groundGroup);
+  const cellMeshList = [];
+  const cellMeshMap = {};
+
+  const buildableMat = new THREE.MeshStandardMaterial({color:0x101a2e, roughness:0.85, metalness:0.1});
+  const buildableHoverOkMat = new THREE.MeshStandardMaterial({color:0x123322, emissive:0x0d5c2f, emissiveIntensity:0.6, roughness:0.7});
+  const buildableHoverBadMat = new THREE.MeshStandardMaterial({color:0x331515, emissive:0x7a1020, emissiveIntensity:0.6, roughness:0.7});
+  const pathMat = new THREE.MeshStandardMaterial({color:0x0a2230, emissive:0x00323f, emissiveIntensity:0.55, roughness:0.6});
+  const occupiedMat = new THREE.MeshStandardMaterial({color:0x161f30, roughness:0.9});
+
+  const cellGeo = new THREE.BoxGeometry(CELL*0.9, 0.2, CELL*0.9);
+
+  for(let gx=0; gx<GRID_W; gx++){
+    for(let gy=0; gy<GRID_H; gy++){
+      const key = gx+','+gy;
+      const isPath = pathSet.has(key);
+      const mesh = new THREE.Mesh(cellGeo, isPath ? pathMat.clone() : buildableMat.clone());
+      const p = gridToWorld(gx,gy);
+      mesh.position.set(p.x, 0.1, p.z);
+      mesh.receiveShadow = true;
+      mesh.userData = {gx, gy, isPath};
+      groundGroup.add(mesh);
+      cellMeshList.push(mesh);
+      cellMeshMap[key] = mesh;
+    }
+  }
+
+  function setCellVisual(gx,gy){
+    const key = gx+','+gy;
+    const mesh = cellMeshMap[key];
+    if(!mesh) return;
+    if(pathSet.has(key)){ mesh.material = pathMat; return; }
+    if(occupiedSet.has(key)){ mesh.material = occupiedMat; return; }
+    mesh.material = buildableMat;
+  }
+
+  /* ---------------------------------------------------------------------
+     PATH GLOW STRIP + PULSES + DECOR
+  --------------------------------------------------------------------- */
+  const pulseGroup = new THREE.Group();
+  scene.add(pulseGroup);
+  const pulseGeo = new THREE.SphereGeometry(0.14, 8, 8);
+  const pulseMat = new THREE.MeshStandardMaterial({color:0x00e5ff, emissive:0x00e5ff, emissiveIntensity:1.6});
+  const PULSE_COUNT = 8;
+  for(let i=0;i<PULSE_COUNT;i++){
+    const m = new THREE.Mesh(pulseGeo, pulseMat);
+    m.userData.offset = (i/PULSE_COUNT) * pathTotalLength;
+    pulseGroup.add(m);
+  }
+  function updatePulses(dt, t){
+    pulseGroup.children.forEach(m=>{
+      const dist = (m.userData.offset + t*3.2) % pathTotalLength;
+      const p = getPointOnPath(dist);
+      m.position.set(p.x, 0.28, p.z);
+    });
+  }
+
+  // spawn portal (start)
+  const portalGeo = new THREE.TorusGeometry(0.7, 0.09, 8, 24);
+  const portalMat = new THREE.MeshStandardMaterial({color:0xff3b5c, emissive:0xff3b5c, emissiveIntensity:1.2});
+  const portal = new THREE.Mesh(portalGeo, portalMat);
+  const startPos = getPointOnPath(0);
+  portal.position.set(startPos.x, 0.6, startPos.z);
+  portal.rotation.x = Math.PI/2;
+  scene.add(portal);
+
+  // core (end)
+  const coreGroup = new THREE.Group();
+  const coreGeo = new THREE.IcosahedronGeometry(0.65, 0);
+  const coreMat = new THREE.MeshStandardMaterial({color:0x00e5ff, emissive:0x00e5ff, emissiveIntensity:1.0, roughness:0.3, metalness:0.4});
+  const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+  coreMesh.castShadow = true;
+  coreGroup.add(coreMesh);
+  const coreRing = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.04, 8, 32), new THREE.MeshStandardMaterial({color:0x00e5ff, emissive:0x00e5ff, emissiveIntensity:0.8}));
+  coreRing.rotation.x = Math.PI/2;
+  coreGroup.add(coreRing);
+  const endPos = getPointOnPath(pathTotalLength);
+  coreGroup.position.set(endPos.x, 0.9, endPos.z);
+  scene.add(coreGroup);
+
+  /* ---------------------------------------------------------------------
+     TOWER BUILDING
+  --------------------------------------------------------------------- */
+  const towersGroup = new THREE.Group();
+  scene.add(towersGroup);
+
+  function buildTowerMesh(cfg){
+    const group = new THREE.Group();
+    const baseMat = new THREE.MeshStandardMaterial({color:0x1a2740, roughness:0.6, metalness:0.4});
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.7, 0.35, 10), baseMat);
+    base.position.y = 0.175;
+    base.castShadow = true; base.receiveShadow = true;
+    group.add(base);
+
+    const turret = new THREE.Group();
+    turret.position.y = 0.42;
+    const accentMat = new THREE.MeshStandardMaterial({color:cfg.color, emissive:cfg.color, emissiveIntensity:0.9, roughness:0.35, metalness:0.5});
+    const darkMat = new THREE.MeshStandardMaterial({color:0x202c42, roughness:0.6, metalness:0.4});
+
+    if(cfg.key === 'filter'){
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.4,0.32,0.4), darkMat);
+      body.castShadow = true;
+      turret.add(body);
+      [-0.14, 0.14].forEach(off=>{
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.045,0.55,8), accentMat);
+        barrel.rotation.x = Math.PI/2;
+        barrel.position.set(off, 0, 0.4);
+        turret.add(barrel);
+      });
+    } else if(cfg.key === 'purge'){
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.36,10,10), darkMat);
+      body.castShadow = true;
+      turret.add(body);
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.17,0.85,10), accentMat);
+      barrel.rotation.x = Math.PI/2;
+      barrel.position.set(0,0,0.55);
+      turret.add(barrel);
+    } else {
+      const body = new THREE.Mesh(new THREE.ConeGeometry(0.32,0.5,7), darkMat);
+      body.rotation.x = Math.PI;
+      body.position.y = 0.1;
+      body.castShadow = true;
+      turret.add(body);
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.09,1.5,8), accentMat);
+      barrel.rotation.x = Math.PI/2;
+      barrel.position.set(0,0.1,0.85);
+      turret.add(barrel);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.34,0.03,6,20), accentMat);
+      ring.rotation.x = Math.PI/2;
+      ring.position.y = 0.05;
+      turret.add(ring);
+    }
+    group.add(turret);
+    group.userData.turret = turret;
+    return group;
+  }
+
+  function makeRangeRing(range, color){
+    const geo = new THREE.RingGeometry(range-0.05, range, 48);
+    const mat = new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.28, side:THREE.DoubleSide});
+    const ring = new THREE.Mesh(geo, mat);
+    ring.rotation.x = -Math.PI/2;
+    ring.position.y = 0.05;
+    return ring;
+  }
+
+  function placeTower(gx, gy, typeKey){
+    const cfg = TOWER_TYPES[typeKey];
+    const group = buildTowerMesh(cfg);
+    const p = gridToWorld(gx,gy);
+    group.position.set(p.x, 0, p.z);
+    towersGroup.add(group);
+
+    const tower = {
+      key: typeKey, cfg, group, gx, gy,
+      damage: cfg.damage, range: cfg.range, fireRate: cfg.fireRate, splash: cfg.splash,
+      cooldown: 0, target: null, kills: 0,
+      rangeRing: null
+    };
+    group.userData.towerRef = tower;
+    towers.push(tower);
+    occupiedSet.add(gx+','+gy);
+    setCellVisual(gx,gy);
+    return tower;
+  }
+
+  function removeTower(tower){
+    towersGroup.remove(tower.group);
+    occupiedSet.delete(tower.gx+','+tower.gy);
+    setCellVisual(tower.gx, tower.gy);
+    towers = towers.filter(t => t !== tower);
+    if(tower.rangeRing){ scene.remove(tower.rangeRing); }
+  }
+
+  /* ---------------------------------------------------------------------
+     PLACEMENT PREVIEW
+  --------------------------------------------------------------------- */
+  let previewMesh = null, previewRing = null, hoveredCellKey = null;
+  function ensurePreview(cfg){
+    if(previewMesh) return;
+    previewMesh = buildTowerMesh(cfg);
+    previewMesh.traverse(o=>{ if(o.material){ o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.55; }});
+    scene.add(previewMesh);
+    previewRing = makeRangeRing(cfg.range, cfg.color);
+    scene.add(previewRing);
+  }
+  function clearPreview(){
+    if(previewMesh){ scene.remove(previewMesh); previewMesh = null; }
+    if(previewRing){ scene.remove(previewRing); previewRing = null; }
+    hoveredCellKey = null;
+  }
+
+  /* ---------------------------------------------------------------------
+     ENEMIES
+  --------------------------------------------------------------------- */
+  const enemiesGroup = new THREE.Group();
+  scene.add(enemiesGroup);
+
+  function enemyGeometry(type){
+    switch(type.geo){
+      case 'oct': return new THREE.OctahedronGeometry(type.size, 0);
+      case 'tet': return new THREE.TetrahedronGeometry(type.size, 0);
+      case 'box': return new THREE.BoxGeometry(type.size*1.4, type.size*1.4, type.size*1.4);
+      default: return new THREE.SphereGeometry(type.size, 8, 8);
+    }
+  }
+
+  function spawnEnemy(typeKey, waveNum){
+    const type = ENEMY_TYPES[typeKey];
+    const hpMult = 1 + (waveNum-1)*0.16;
+    const mesh = new THREE.Mesh(
+      enemyGeometry(type),
+      new THREE.MeshStandardMaterial({color:type.color, emissive:type.color, emissiveIntensity:0.5, roughness:0.4, metalness:0.2})
+    );
+    mesh.castShadow = true;
+    const start = getPointOnPath(0);
+    mesh.position.set(start.x, 0.5, start.z);
+    enemiesGroup.add(mesh);
+
+    // health bar
+    const barGroup = new THREE.Group();
+    const bg = new THREE.Mesh(new THREE.PlaneGeometry(0.7,0.09), new THREE.MeshBasicMaterial({color:0x220a12}));
+    const fg = new THREE.Mesh(new THREE.PlaneGeometry(0.7,0.09), new THREE.MeshBasicMaterial({color:0x38ff8a}));
+    fg.position.z = 0.001;
+    barGroup.add(bg); barGroup.add(fg);
+    barGroup.position.set(start.x, 1.05, start.z);
+    scene.add(barGroup);
+
+    const enemy = {
+      typeKey, type, mesh, barGroup, fg,
+      hp: enemyHealth(typeKey, waveNum), maxHp: enemyHealth(typeKey, waveNum),
+      speed: type.speed, traveled: 0, alive: true, phase: Math.random()*10,
+      goldValue: type.gold, lifeDamage: type.dmg
+    };
+    enemies.push(enemy);
+    return enemy;
+  }
+
+  function removeEnemy(enemy){
+    enemiesGroup.remove(enemy.mesh);
+    scene.remove(enemy.barGroup);
+    enemies = enemies.filter(e => e !== enemy);
+  }
+
+  /* ---------------------------------------------------------------------
+     PROJECTILES & EFFECTS
+  --------------------------------------------------------------------- */
+  const projGroup = new THREE.Group();
+  scene.add(projGroup);
+
+  function fireProjectile(tower){
+    const cfg = tower.cfg;
+    const mat = new THREE.MeshStandardMaterial({color:cfg.color, emissive:cfg.color, emissiveIntensity:2.0});
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8), mat);
+    const p = tower.group.position;
+    mesh.position.set(p.x, 0.85, p.z);
+    projGroup.add(mesh);
+    projectiles.push({
+      mesh, target: tower.target, damage: tower.damage, splash: tower.splash,
+      speed: 16, sourceTower: tower
+    });
+  }
+
+  function spawnEffect(pos, color){
+    const geo = new THREE.RingGeometry(0.05, 0.16, 20);
+    const mat = new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.9, side:THREE.DoubleSide});
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(pos.x, 0.35, pos.z);
+    mesh.rotation.x = -Math.PI/2;
+    scene.add(mesh);
+    effects.push({mesh, life: 0.35, maxLife: 0.35});
+  }
+
+  function damageEnemy(enemy, dmg, sourceTower){
+    if(!enemy.alive) return;
+    enemy.hp -= dmg;
+    if(enemy.hp <= 0 && enemy.alive){
+      enemy.alive = false;
+      gold += enemy.goldValue;
+      updateGoldUI();
+      if(sourceTower) sourceTower.kills++;
+      spawnEffect(enemy.mesh.position, 0xffffff);
+    }
+  }
+
+  /* ---------------------------------------------------------------------
+     WAVES
+  --------------------------------------------------------------------- */
+  function startWave(){
+    if(!canStartWave({wave, waveInProgress, gameOver})) return;
+    wave++;
+    waveInProgress = true;
+    spawnQueue = generateWave(wave);
+    spawnTimer = 0;
+    updateWaveUI();
+    refreshWaveButton();
+  }
+
+  function updateSpawning(dt){
+    if(spawnQueue.length === 0) return;
+    spawnTimer -= dt;
+    if(spawnTimer <= 0){
+      spawnEnemy(spawnQueue.shift(), wave);
+      spawnTimer = Math.max(0.32, 0.75 - wave*0.02);
+    }
+  }
+
+  function checkWaveComplete(){
+    if(waveInProgress && spawnQueue.length===0 && enemies.length===0){
+      waveInProgress = false;
+      if(wave >= MAX_WAVE){
+        triggerWin();
+      } else {
+        refreshWaveButton();
+      }
+    }
+  }
+
+  /* ---------------------------------------------------------------------
+     UPDATE LOOP FUNCTIONS
+  --------------------------------------------------------------------- */
+  function updateEnemies(dt, t){
+    for(const enemy of enemies){
+      if(!enemy.alive) continue;
+      enemy.traveled += enemy.speed*dt;
+      if(enemy.traveled >= pathTotalLength){
+        lives -= enemy.lifeDamage;
+        updateLivesUI();
+        enemy.alive = false;
+        enemy.reachedEnd = true;
+        if(lives <= 0){ triggerLoss(); }
+        continue;
+      }
+      const p = getPointOnPath(enemy.traveled);
+      const bob = Math.sin(t*4 + enemy.phase)*0.08;
+      enemy.mesh.position.set(p.x, 0.5+bob, p.z);
+      enemy.mesh.rotation.y += dt*1.6;
+      enemy.mesh.rotation.x += dt*0.8;
+      enemy.barGroup.position.set(p.x, 1.05+bob, p.z);
+      enemy.barGroup.quaternion.copy(camera.quaternion);
+      enemy.fg.scale.x = Math.max(0.001, enemy.hp/enemy.maxHp);
+      enemy.fg.position.x = -(0.7 - 0.7*enemy.fg.scale.x)/2;
+    }
+    const dead = enemies.filter(e=>!e.alive);
+    dead.forEach(removeEnemy);
+    if(dead.length) checkWaveComplete();
+  }
+
+  function distXZ(a,b){
+    const dx=a.x-b.x, dz=a.z-b.z;
+    return Math.sqrt(dx*dx+dz*dz);
+  }
+
+  function updateTowers(dt){
+    for(const tower of towers){
+      tower.cooldown -= dt;
+      if(!tower.target || !tower.target.alive || distXZ(tower.group.position, tower.target.mesh.position) > tower.range){
+        tower.target = null;
+        let best=null, bestDist=Infinity;
+        for(const e of enemies){
+          if(!e.alive) continue;
+          const d = distXZ(tower.group.position, e.mesh.position);
+          if(d <= tower.range && d < bestDist){ best=e; bestDist=d; }
+        }
+        tower.target = best;
+      }
+      if(tower.target){
+        const dx = tower.target.mesh.position.x - tower.group.position.x;
+        const dz = tower.target.mesh.position.z - tower.group.position.z;
+        tower.group.userData.turret.rotation.y = Math.atan2(dx,dz);
+        if(tower.cooldown <= 0){
+          fireProjectile(tower);
+          tower.cooldown = 1/tower.fireRate;
+        }
+      }
+      if(selectedTower === tower){
+        tower.group.userData.turret.position.y = 0.42;
+      }
+    }
+  }
+
+  function updateProjectiles(dt){
+    const remaining = [];
+    for(const proj of projectiles){
+      if(!proj.target || !proj.target.alive){
+        projGroup.remove(proj.mesh);
+        continue;
+      }
+      const targetPos = proj.target.mesh.position;
+      const dir = new THREE.Vector3().subVectors(targetPos, proj.mesh.position);
+      const dist = dir.length();
+      if(dist < 0.35){
+        damageEnemy(proj.target, proj.damage, proj.sourceTower);
+        if(proj.splash > 0){
+          for(const e of enemies){
+            if(e === proj.target || !e.alive) continue;
+            if(distXZ(e.mesh.position, targetPos) <= proj.splash){
+              damageEnemy(e, proj.damage*0.6, proj.sourceTower);
+            }
+          }
+        }
+        spawnEffect(targetPos, proj.mesh.material.color.getHex());
+        projGroup.remove(proj.mesh);
+        continue;
+      }
+      dir.normalize();
+      proj.mesh.position.addScaledVector(dir, proj.speed*dt);
+      remaining.push(proj);
+    }
+    projectiles = remaining;
+  }
+
+  function updateEffects(dt){
+    const remaining = [];
+    for(const fx of effects){
+      fx.life -= dt;
+      if(fx.life <= 0){ scene.remove(fx.mesh); continue; }
+      const s = 1 + (1-fx.life/fx.maxLife)*3;
+      fx.mesh.scale.set(s,s,s);
+      fx.mesh.material.opacity = fx.life/fx.maxLife;
+      remaining.push(fx);
+    }
+    effects = remaining;
+  }
+
+  /* ---------------------------------------------------------------------
+     UI WIRING
+  --------------------------------------------------------------------- */
+  const goldValEl = document.getElementById('goldVal');
+  const livesValEl = document.getElementById('livesVal');
+  const waveValEl = document.getElementById('waveVal');
+  const waveBtn = document.getElementById('waveBtn');
+  const nodeCardsEl = document.getElementById('nodeCards');
+  const selectedPanel = document.getElementById('selectedPanel');
+  const messageEl = document.getElementById('message');
+  const overlay = document.getElementById('overlay');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlaySubtitle = document.getElementById('overlaySubtitle');
+
+  function updateGoldUI(){ goldValEl.textContent = Math.floor(gold); refreshNodeCards(); }
+  function updateLivesUI(){ livesValEl.textContent = Math.max(0,Math.floor(lives)); }
+  function updateWaveUI(){ waveValEl.textContent = wave; }
+  function refreshWaveButton(){
+    waveBtn.disabled = waveInProgress || gameOver || wave>=MAX_WAVE;
+    waveBtn.textContent = wave>=MAX_WAVE ? 'ALL WAVES CLEARED' : (waveInProgress ? 'WAVE IN PROGRESS' : (wave===0 ? 'INITIATE WAVE' : 'NEXT WAVE'));
+  }
+
+  function iconShape(shape,color){
+    const hex = '#' + color.toString(16).padStart(6,'0');
+    if(shape==='diamond') return `<div style="width:100%;height:100%;background:${hex};transform:rotate(45deg) scale(0.7);box-shadow:0 0 8px ${hex};"></div>`;
+    if(shape==='circle') return `<div style="width:100%;height:100%;border-radius:50%;background:${hex};box-shadow:0 0 8px ${hex};"></div>`;
+    return `<div style="width:0;height:0;border-left:11px solid transparent;border-right:11px solid transparent;border-bottom:19px solid ${hex};filter:drop-shadow(0 0 6px ${hex});"></div>`;
+  }
+
+  function buildNodeCards(){
+    nodeCardsEl.innerHTML = '';
+    Object.values(TOWER_TYPES).forEach(cfg=>{
+      const card = document.createElement('div');
+      card.className = 'node-card';
+      card.dataset.key = cfg.key;
+      card.innerHTML = `
+        <div class="node-icon">${iconShape(cfg.shape, cfg.color)}</div>
+        <div class="node-name">${cfg.name}</div>
+        <div class="node-cost">⬡ ${cfg.cost}</div>
+        <div class="node-desc">${cfg.desc}</div>
+      `;
+      card.addEventListener('click', ()=>{
+        if(gameOver) return;
+        if(selectedTowerType === cfg.key){
+          selectedTowerType = null;
+          clearPreview();
+        } else {
+          selectedTowerType = cfg.key;
+          deselectTower();
+          clearPreview();
+          ensurePreview(cfg);
+        }
+        refreshNodeCards();
+      });
+      nodeCardsEl.appendChild(card);
+    });
+  }
+  function refreshNodeCards(){
+    [...nodeCardsEl.children].forEach(card=>{
+      const cfg = TOWER_TYPES[card.dataset.key];
+      card.classList.toggle('active', selectedTowerType===cfg.key);
+      card.classList.toggle('disabled', gold < cfg.cost);
+    });
+  }
+  buildNodeCards();
+
+  let msgTimer = null;
+  function showMessage(text){
+    messageEl.textContent = text;
+    messageEl.classList.add('show');
+    clearTimeout(msgTimer);
+    msgTimer = setTimeout(()=> messageEl.classList.remove('show'), 1400);
+  }
+
+  const selName = document.getElementById('selName');
+  const selDmg = document.getElementById('selDmg');
+  const selRange = document.getElementById('selRange');
+  const selRate = document.getElementById('selRate');
+  const selKills = document.getElementById('selKills');
+  const purgeRefund = document.getElementById('purgeRefund');
+  const purgeBtn = document.getElementById('purgeBtn');
+
+  function selectTower(tower){
+    deselectTower();
+    selectedTower = tower;
+    selectedTowerType = null;
+    clearPreview();
+    refreshNodeCards();
+    const ring = makeRangeRing(tower.range, tower.cfg.color);
+    ring.position.x = tower.group.position.x;
+    ring.position.z = tower.group.position.z;
+    scene.add(ring);
+    tower.rangeRing = ring;
+    selName.textContent = tower.cfg.name.toUpperCase();
+    selDmg.textContent = tower.damage;
+    selRange.textContent = tower.range.toFixed(1);
+    selRate.textContent = tower.fireRate.toFixed(2)+'/s';
+    selKills.textContent = tower.kills;
+    purgeRefund.textContent = towerRefund(tower.key);
+    selectedPanel.classList.remove('hidden');
+  }
+  function deselectTower(){
+    if(selectedTower && selectedTower.rangeRing){ scene.remove(selectedTower.rangeRing); selectedTower.rangeRing=null; }
+    selectedTower = null;
+    selectedPanel.classList.add('hidden');
+  }
+  purgeBtn.addEventListener('click', ()=>{
+    if(!selectedTower) return;
+    const refund = towerRefund(selectedTower.key);
+    gold += refund;
+    updateGoldUI();
+    removeTower(selectedTower);
+    deselectTower();
+  });
+
+  waveBtn.addEventListener('click', startWave);
+  refreshWaveButton();
+
+  document.getElementById('restartBtn').addEventListener('click', resetGame);
+
+  /* ---------------------------------------------------------------------
+     INPUT / RAYCASTING
+  --------------------------------------------------------------------- */
+  const raycaster = new THREE.Raycaster();
+  const mouseNDC = new THREE.Vector2();
+  let isOrbiting = false, lastX=0, lastY=0;
+
+  function setMouseFromEvent(e){
+    const rect = canvas.getBoundingClientRect();
+    mouseNDC.x = ((e.clientX-rect.left)/rect.width)*2-1;
+    mouseNDC.y = -((e.clientY-rect.top)/rect.height)*2+1;
+  }
+
+  canvas.addEventListener('contextmenu', e=> e.preventDefault());
+
+  canvas.addEventListener('pointerdown', (e)=>{
+    if(e.button === 2){
+      isOrbiting = true; lastX=e.clientX; lastY=e.clientY;
+      return;
+    }
+    if(e.button !== 0 || gameOver) return;
+    setMouseFromEvent(e);
+    raycaster.setFromCamera(mouseNDC, camera);
+
+    const towerHits = raycaster.intersectObjects(towersGroup.children, true);
+    if(towerHits.length){
+      let obj = towerHits[0].object;
+      while(obj && !obj.userData.towerRef) obj = obj.parent;
+      if(obj && obj.userData.towerRef){ selectTower(obj.userData.towerRef); return; }
+    }
+
+    if(selectedTowerType){
+      const cellHits = raycaster.intersectObjects(cellMeshList);
+      if(cellHits.length){
+        const {gx, gy, isPath} = cellHits[0].object.userData;
+        const key = gx+','+gy;
+        const cfg = TOWER_TYPES[selectedTowerType];
+        const placement = canPlaceTower({gx, gy, isPath, occupied: occupiedSet, gold, typeKey: selectedTowerType});
+        if(!placement.ok){
+          const messages = {path:'CANNOT DEPLOY ON DATA PATH', occupied:'NODE SLOT OCCUPIED', 'insufficient-gold':'INSUFFICIENT CYCLES'};
+          showMessage(messages[placement.reason] || 'INVALID NODE DEPLOYMENT');
+          return;
+        }
+        gold -= placement.cost;
+        updateGoldUI();
+        placeTower(gx, gy, selectedTowerType);
+        return;
+      }
+    } else {
+      deselectTower();
+    }
+  });
+
+  window.addEventListener('pointermove', (e)=>{
+    if(isOrbiting){
+      const dx = e.clientX-lastX, dy = e.clientY-lastY;
+      lastX=e.clientX; lastY=e.clientY;
+      camAzimuth -= dx*0.006;
+      camElevation = Math.min(1.35, Math.max(0.35, camElevation - dy*0.006));
+      return;
+    }
+    if(!selectedTowerType) return;
+    setMouseFromEvent(e);
+    raycaster.setFromCamera(mouseNDC, camera);
+    const cellHits = raycaster.intersectObjects(cellMeshList);
+    if(cellHits.length){
+      const {gx, gy, isPath} = cellHits[0].object.userData;
+      const key = gx+','+gy;
+      if(key !== hoveredCellKey){
+        hoveredCellKey = key;
+        const cfg = TOWER_TYPES[selectedTowerType];
+        const valid = !isPath && !occupiedSet.has(key);
+        const p = gridToWorld(gx,gy);
+        ensurePreview(cfg);
+        previewMesh.position.set(p.x,0,p.z);
+        previewRing.position.set(p.x,0.05,p.z);
+        previewMesh.traverse(o=>{ if(o.material) o.material.opacity = valid?0.6:0.25; });
+        previewRing.material.color.set(valid ? cfg.color : 0xff3b5c);
+      }
+    }
+  });
+  window.addEventListener('pointerup', ()=>{ isOrbiting=false; });
+
+  canvas.addEventListener('wheel', (e)=>{
+    e.preventDefault();
+    camDistance = Math.min(40, Math.max(10, camDistance + e.deltaY*0.02));
+  }, {passive:false});
+
+  window.addEventListener('keydown', (e)=>{
+    if(e.key === 'Escape'){
+      selectedTowerType = null;
+      clearPreview();
+      deselectTower();
+      refreshNodeCards();
+    }
+  });
+
+  window.addEventListener('resize', ()=>{
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  /* ---------------------------------------------------------------------
+     GAME OVER / WIN / RESET
+  --------------------------------------------------------------------- */
+  function triggerLoss(){
+    gameOver = true;
+    overlayTitle.textContent = 'CORE BREACHED';
+    overlayTitle.style.color = 'var(--danger)';
+    overlaySubtitle.textContent = `The intrusion overwhelmed your defenses at wave ${wave}. Deploy again to re-secure the sector.`;
+    overlay.classList.remove('hidden');
+  }
+  function triggerWin(){
+    gameOver = true;
+    overlayTitle.textContent = 'SECTOR SECURED';
+    overlayTitle.style.color = 'var(--cyan)';
+    overlaySubtitle.textContent = `All ${MAX_WAVE} intrusion waves neutralized. Core integrity held at ${Math.max(0,Math.floor(lives))}.`;
+    overlay.classList.remove('hidden');
+  }
+
+  function resetGame(){
+    towers.slice().forEach(removeTower);
+    enemies.slice().forEach(removeEnemy);
+    projectiles.forEach(p=>projGroup.remove(p.mesh));
+    projectiles = [];
+    effects.forEach(fx=>scene.remove(fx.mesh));
+    effects = [];
+    gold = 150; lives = 20; wave = 0; waveInProgress = false; gameOver = false;
+    spawnQueue = []; spawnTimer = 0;
+    selectedTowerType = null; clearPreview(); deselectTower();
+    updateGoldUI(); updateLivesUI(); updateWaveUI(); refreshWaveButton(); refreshNodeCards();
+    overlay.classList.add('hidden');
+  }
+
+  /* ---------------------------------------------------------------------
+     MAIN LOOP
+  --------------------------------------------------------------------- */
+  const clock = new THREE.Clock();
+  let elapsed = 0;
+  function animate(){
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.05);
+    elapsed += dt;
+
+    if(!gameOver){
+      if(waveInProgress) updateSpawning(dt);
+      updateEnemies(dt, elapsed);
+      updateTowers(dt);
+      updateProjectiles(dt);
+    }
+    updateEffects(dt);
+    updatePulses(dt, elapsed);
+    coreGroup.rotation.y += dt*0.5;
+    coreMesh.scale.setScalar(1 + Math.sin(elapsed*2.4)*0.06);
+    portal.rotation.z += dt*0.8;
+    updateCamera();
+    renderer.render(scene, camera);
+  }
+
+  updateGoldUI(); updateLivesUI(); updateWaveUI();
+  animate();
+})();
+</script>
+</body>
+</html>
