@@ -15,10 +15,14 @@ export function generateWave(wave) {
   return list;
 }
 
+function hasTowerInventoryItem(inventory, typeKey) {
+  return inventory?.some((item) => item.type === 'tower' && item.key === typeKey) || false;
+}
+
 export function canPlaceTower({gx, gy, isWall, occupied, inventory, typeKey}) {
   const tower = TOWER_TYPES[typeKey];
   if (!tower) return {ok: false, reason: 'unknown-type'};
-  if ((inventory?.tower?.[typeKey] || 0) < 1) return {ok: false, reason: 'unavailable'};
+  if (!hasTowerInventoryItem(inventory, typeKey)) return {ok: false, reason: 'unavailable'};
   if (!isWall) return {ok: false, reason: 'wall'};
   if (occupied.has(cellKey(gx, gy))) return {ok: false, reason: 'occupied'};
   return {ok: true};

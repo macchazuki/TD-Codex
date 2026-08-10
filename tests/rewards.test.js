@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addRewardToInventory, drawRewards, inventoryCount, removeFromInventory } from '../src/game/rewards.js';
+import { addRewardToInventory, drawRewards, removeFromInventory } from '../src/game/rewards.js';
 
 describe('rewards', () => {
   it('draws a distinct, deterministic selection from a reward pool', () => {
@@ -12,21 +12,22 @@ describe('rewards', () => {
     expect(drawRewards([{key: 'a'}], 3, () => 0)).toEqual([{key: 'a'}]);
   });
 
-  it('adds generic rewards to typed inventory buckets', () => {
-    const inventory = {};
+  it('adds each reward as a separate inventory item', () => {
+    const inventory = [];
     addRewardToInventory(inventory, {type: 'tower', key: 'filter'});
     addRewardToInventory(inventory, {type: 'tower', key: 'filter'});
-    addRewardToInventory(inventory, {type: 'gold', key: 'small'});
 
-    expect(inventoryCount(inventory, 'tower', 'filter')).toBe(2);
-    expect(inventoryCount(inventory, 'gold', 'small')).toBe(1);
+    expect(inventory).toHaveLength(2);
+    expect(inventory[0]).not.toBe(inventory[1]);
   });
 
   it('removes one inventory copy only when available', () => {
-    const inventory = {tower: {filter: 1}};
+    const inventory = [{type: 'tower', key: 'filter'}, {type: 'tower', key: 'filter'}];
 
     expect(removeFromInventory(inventory, 'tower', 'filter')).toBe(true);
+    expect(inventory).toHaveLength(1);
+    expect(removeFromInventory(inventory, 'tower', 'filter')).toBe(true);
     expect(removeFromInventory(inventory, 'tower', 'filter')).toBe(false);
-    expect(inventoryCount(inventory, 'tower', 'filter')).toBe(0);
+    expect(inventory).toHaveLength(0);
   });
 });

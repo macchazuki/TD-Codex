@@ -77,9 +77,10 @@
     margin:0 14px 14px 14px;
   }
 
-  #nodeCards{display:flex; gap:10px; flex-wrap:wrap;}
+  #nodeCards{display:flex; align-items:flex-start; align-content:flex-start; gap:10px; flex-wrap:wrap;}
   .node-card{
     width:150px;
+    flex:0 0 auto;
     background:var(--panel); border:1px solid var(--panel-border);
     backdrop-filter:blur(6px);
     padding:10px 12px; cursor:pointer; transition:all .15s ease;
@@ -242,8 +243,8 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
   let selectedTower = null;
   let spawnQueue = [], spawnTimer = 0;
   let towers = [], enemies = [], projectiles = [], effects = [], pulses = [];
-  let inventory = {tower: Object.fromEntries(Object.keys(TOWER_TYPES).map((key) => [key, 1]))};
   const rewardPool = createTowerRewardPool(TOWER_TYPES);
+  let inventory = rewardPool.map((reward) => ({...reward}));
   let currentRewards = [];
   let occupiedSet = new Set(), wallSet = new Set(), pathSet = new Set(), pathSetRoute = [];
   let routeVersion = 0;
@@ -899,12 +900,13 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
 
   function buildNodeCards(){
     nodeCardsEl.innerHTML = '';
-    Object.values(TOWER_TYPES).forEach(cfg=>{
-      const inventoryCount = inventory.tower[cfg.key] || 0;
-      if(inventoryCount < 1) return;
+    inventory.forEach((item)=>{
+      const cfg = TOWER_TYPES[item.key];
+      if(!cfg) return;
       const card = document.createElement('div');
       card.className = 'node-card';
       card.dataset.key = cfg.key;
+      card.setAttribute('aria-label', `${cfg.name}, inventory item`);
       card.classList.toggle('active', selectedTowerType === cfg.key);
       card.innerHTML = `
         <div class="node-icon">${iconShape(cfg.shape, cfg.color)}</div>
@@ -912,7 +914,7 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
         <div class="node-desc">${cfg.desc}</div>
       `;
       card.addEventListener('click', ()=>{
-        if(gameOver || (inventory.tower[cfg.key] || 0) < 1) return;
+        if(gameOver || !inventory.some((inventoryItem) => inventoryItem.type === 'tower' && inventoryItem.key === cfg.key)) return;
         if(selectedTowerType === cfg.key){
           selectedTowerType = null;
           clearPreview();
@@ -1211,7 +1213,7 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
     refreshRoute();
     gold = 150; lives = 20; wave = 0; waveInProgress = false; gameOver = false; awaitingReward = false;
     spawnQueue = []; spawnTimer = 0;
-    inventory = {tower: Object.fromEntries(Object.keys(TOWER_TYPES).map((key) => [key, 1]))};
+    inventory = rewardPool.map((reward) => ({...reward}));
     currentRewards = [];
     selectedTowerType = null; clearPreview(); deselectTower();
     updateGoldUI(); updateLivesUI(); updateWaveUI(); refreshWaveButton(); refreshNodeCards();
@@ -1238,7 +1240,7 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
         towers: towers.length,
         previewVisible: Boolean(previewMesh),
         enemies: enemies.length,
-        inventory: {...inventory.tower}, awaitingReward,
+        inventory: inventory.map((item) => item.key), awaitingReward,
         rewardChoices: currentRewards.map((reward) => reward.key)
       };
     },

@@ -91,5 +91,12 @@ test('shows three reward choices and adds the selected tower to inventory', asyn
   await page.locator('#rewardCards .reward-card').first().click();
 
   await expect(page.locator('#rewardOverlay')).toBeHidden();
-  await expect.poll(() => page.evaluate((key) => window.__CORE_DEFENSE__.getSceneState().inventory[key] > 1, rewardKey)).toBe(true);
+  await expect.poll(() => page.evaluate((key) => window.__CORE_DEFENSE__.getSceneState().inventory.filter((itemKey) => itemKey === key).length, rewardKey)).toBe(2);
+  const rewardCards = page.locator(`#nodeCards .node-card[data-key="${rewardKey}"]`);
+  await expect(rewardCards).toHaveCount(2);
+  const cardPositions = await rewardCards.evaluateAll((cards) => cards.map((card) => {
+    const bounds = card.getBoundingClientRect();
+    return {left: bounds.left, top: bounds.top};
+  }));
+  expect(cardPositions[0]).not.toEqual(cardPositions[1]);
 });

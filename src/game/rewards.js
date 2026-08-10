@@ -29,25 +29,19 @@ export function createTowerRewardPool(towerTypes) {
   }));
 }
 
-/** Adds one selected reward to its typed inventory bucket. */
+/** Adds one separate copy of a selected reward to the inventory array. */
 export function addRewardToInventory(inventory, reward) {
   if (!reward || typeof reward.type !== 'string' || typeof reward.key !== 'string') {
     return inventory;
   }
-  const bucket = inventory[reward.type] || {};
-  bucket[reward.key] = (bucket[reward.key] || 0) + 1;
-  inventory[reward.type] = bucket;
+  inventory.push({...reward});
   return inventory;
 }
 
-/** Returns the number of copies of a reward in its typed inventory bucket. */
-export function inventoryCount(inventory, rewardType, rewardKey) {
-  return inventory[rewardType]?.[rewardKey] || 0;
-}
-
-/** Removes one tower copy from inventory when it is deployed. */
+/** Removes one matching inventory object when it is deployed. */
 export function removeFromInventory(inventory, rewardType, rewardKey) {
-  const count = inventoryCount(inventory, rewardType, rewardKey);
-  if (count > 0) inventory[rewardType][rewardKey] = count - 1;
-  return count > 0;
+  const itemIndex = inventory.findIndex((item) => item.type === rewardType && item.key === rewardKey);
+  if (itemIndex < 0) return false;
+  inventory.splice(itemIndex, 1);
+  return true;
 }
