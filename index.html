@@ -899,14 +899,13 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
 
   function buildNodeCards(){
     nodeCardsEl.innerHTML = '';
-    inventory.tower.forEach((item, itemIndex)=>{
+    inventory.tower.forEach((item)=>{
       const cfg = TOWER_TYPES[item.key];
       if(!cfg) return;
       const card = document.createElement('div');
       card.className = 'node-card';
       card.dataset.key = cfg.key;
-      card.dataset.inventoryIndex = itemIndex;
-      card.setAttribute('aria-label', `${cfg.name}, inventory item ${itemIndex + 1}`);
+      card.setAttribute('aria-label', `${cfg.name}, inventory item`);
       card.classList.toggle('active', selectedTowerType === cfg.key);
       card.innerHTML = `
         <div class="node-icon">${iconShape(cfg.shape, cfg.color)}</div>

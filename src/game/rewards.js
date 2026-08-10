@@ -40,13 +40,6 @@ export function addRewardToInventory(inventory, reward) {
   return inventory;
 }
 
-/** Returns the number of separate reward objects matching a type and key. */
-export function inventoryCount(inventory, rewardType, rewardKey) {
-  const bucket = inventory[rewardType];
-  if (Array.isArray(bucket)) return bucket.filter((item) => item.key === rewardKey).length;
-  return 0;
-}
-
 /** Removes one matching inventory object when it is deployed. */
 export function removeFromInventory(inventory, rewardType, rewardKey) {
   const bucket = inventory[rewardType];
