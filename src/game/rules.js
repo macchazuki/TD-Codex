@@ -15,9 +15,10 @@ export function generateWave(wave) {
   return list;
 }
 
-export function canPlaceTower({gx, gy, isWall, occupied, typeKey}) {
+export function canPlaceTower({gx, gy, isWall, occupied, availableTowerKeys, typeKey}) {
   const tower = TOWER_TYPES[typeKey];
   if (!tower) return {ok: false, reason: 'unknown-type'};
+  if (!availableTowerKeys.has(typeKey)) return {ok: false, reason: 'unavailable'};
   if (!isWall) return {ok: false, reason: 'wall'};
   if (occupied.has(cellKey(gx, gy))) return {ok: false, reason: 'occupied'};
   return {ok: true};

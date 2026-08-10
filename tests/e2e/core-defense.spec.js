@@ -30,11 +30,13 @@ test('builds walls, places towers on them, and removes towers safely', async ({p
 
   await page.mouse.click(cell.x, cell.y);
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState())).toMatchObject({towers: 1, walls: 2});
+  await expect(page.locator('#nodeCards .node-card').first()).toHaveClass(/disabled/);
   await expect(page.locator('#goldVal')).toHaveText('150');
 
   await page.mouse.click(cell.x, cell.y);
   await page.locator('#purgeBtn').click();
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState())).toMatchObject({towers: 0, walls: 2});
+  await expect(page.locator('#nodeCards .node-card').first()).not.toHaveClass(/disabled/);
   await page.mouse.move(cell.x, cell.y);
   await page.mouse.down({button: 'right'});
   await page.mouse.move(secondCell.x, secondCell.y, {steps: 4});

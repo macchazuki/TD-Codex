@@ -86,6 +86,7 @@
   }
   .node-card:hover{border-color:var(--text-dim);}
   .node-card.active{border-color:var(--cyan); box-shadow:0 0 14px rgba(0,229,255,0.3); background:rgba(0,229,255,0.06);}
+  .node-card.disabled{opacity:0.4; cursor:not-allowed;}
   .node-icon{width:22px; height:22px; margin-bottom:8px;}
   .node-name{font-family:'Orbitron',sans-serif; font-size:12px; font-weight:700; letter-spacing:0.5px; margin-bottom:4px;}
   .node-desc{font-size:10px; color:var(--text-dim); margin-top:6px; line-height:1.4;}
@@ -207,6 +208,7 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
   let selectedTower = null;
   let spawnQueue = [], spawnTimer = 0;
   let towers = [], enemies = [], projectiles = [], effects = [], pulses = [];
+  let availableTowerKeys = new Set(Object.keys(TOWER_TYPES));
   let occupiedSet = new Set(), wallSet = new Set(), pathSet = new Set(), pathSetRoute = [];
   let routeVersion = 0;
   const startCell = {gx: 0, gy: 1};
@@ -873,7 +875,7 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
         <div class="node-desc">${cfg.desc}</div>
       `;
       card.addEventListener('click', ()=>{
-        if(gameOver) return;
+        if(gameOver || !availableTowerKeys.has(cfg.key)) return;
         if(selectedTowerType === cfg.key){
           selectedTowerType = null;
           clearPreview();
@@ -892,6 +894,7 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
     [...nodeCardsEl.children].forEach(card=>{
       const cfg = TOWER_TYPES[card.dataset.key];
       card.classList.toggle('active', selectedTowerType===cfg.key);
+      card.classList.toggle('disabled', !availableTowerKeys.has(cfg.key));
     });
   }
   buildNodeCards();
@@ -937,8 +940,10 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
   }
   purgeBtn.addEventListener('click', ()=>{
     if(!selectedTower) return;
+    availableTowerKeys.add(selectedTower.key);
     removeTower(selectedTower);
     deselectTower();
+    refreshNodeCards();
   });
 
   waveBtn.addEventListener('click', startWave);
@@ -1016,13 +1021,17 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
           return;
         }
         const cfg = TOWER_TYPES[selectedTowerType];
-        const placement = canPlaceTower({gx, gy, isWall: wallSet.has(key), occupied: occupiedSet, typeKey: selectedTowerType});
+        const placement = canPlaceTower({gx, gy, isWall: wallSet.has(key), occupied: occupiedSet, availableTowerKeys, typeKey: selectedTowerType});
         if(!placement.ok){
-          const messages = {wall:'DEPLOY A WALL FIRST', occupied:'NODE SLOT OCCUPIED'};
+          const messages = {wall:'DEPLOY A WALL FIRST', occupied:'NODE SLOT OCCUPIED', unavailable:'NODE ALREADY DEPLOYED'};
           showMessage(messages[placement.reason] || 'INVALID NODE DEPLOYMENT');
           return;
         }
         placeTower(gx, gy, selectedTowerType);
+        availableTowerKeys.delete(selectedTowerType);
+        selectedTowerType = null;
+        clearPreview();
+        refreshNodeCards();
         return;
       }
     } else {
@@ -1126,6 +1135,7 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
     refreshRoute();
     gold = 150; lives = 20; wave = 0; waveInProgress = false; gameOver = false;
     spawnQueue = []; spawnTimer = 0;
+    availableTowerKeys = new Set(Object.keys(TOWER_TYPES));
     selectedTowerType = null; clearPreview(); deselectTower();
     updateGoldUI(); updateLivesUI(); updateWaveUI(); refreshWaveButton(); refreshNodeCards();
     overlay.classList.add('hidden');
