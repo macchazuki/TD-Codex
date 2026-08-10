@@ -137,6 +137,32 @@
   }
   #restartBtn:hover{background:rgba(0,229,255,0.25); box-shadow:0 0 16px rgba(0,229,255,0.35);}
 
+  #rewardOverlay{
+    position:absolute; inset:0; background:rgba(4,6,12,0.86); backdrop-filter:blur(4px);
+    display:flex; align-items:center; justify-content:center; z-index:15;
+  }
+  #rewardOverlay.hidden{display:none;}
+  #rewardBox{width:min(720px, calc(100vw - 32px)); padding:30px; border:1px solid var(--panel-border); background:var(--panel);}
+  #rewardTitle{font-family:'Orbitron',sans-serif; color:var(--cyan); font-size:24px; letter-spacing:2px; text-align:center;}
+  #rewardSubtitle{font-size:11px; color:var(--text-dim); margin:10px 0 22px; text-align:center;}
+  #rewardCards{display:flex; gap:12px; justify-content:center;}
+  .reward-card{
+    flex:1; min-height:190px; padding:16px 12px; color:var(--text); background:rgba(0,229,255,0.05);
+    border:1px solid var(--panel-border); cursor:pointer; text-align:left; transition:all .15s ease;
+  }
+  .reward-card:hover{border-color:var(--cyan); background:rgba(0,229,255,0.13); box-shadow:0 0 16px rgba(0,229,255,0.25);}
+  .reward-card .node-icon{margin:0 auto 14px;}
+  .reward-card .node-name{font-size:12px; text-align:center;}
+  .reward-card .node-desc{min-height:42px;}
+  .reward-stats{display:flex; justify-content:space-between; margin-top:10px; color:var(--amber); font-size:10px;}
+
+  @media (max-width:520px){
+    #rewardBox{padding:22px 14px;}
+    #rewardCards{gap:6px;}
+    .reward-card{padding:12px 8px; min-height:175px;}
+    .reward-card .node-desc{display:none;}
+  }
+
   .hidden{display:none !important;}
 
   @media (max-width:720px){
@@ -179,6 +205,14 @@
     <div id="hint">LEFT-DRAG: place walls · RIGHT-DRAG: remove walls · CLICK: select node &nbsp;·&nbsp; SCROLL: zoom</div>
   </div>
 
+  <div id="rewardOverlay" class="hidden" aria-labelledby="rewardTitle">
+    <div id="rewardBox" class="brackets">
+      <div id="rewardTitle">WAVE REWARD</div>
+      <div id="rewardSubtitle">SELECT ONE NODE TO ADD TO YOUR INVENTORY</div>
+      <div id="rewardCards"></div>
+    </div>
+  </div>
+
   <div id="overlay" class="hidden">
     <div id="overlayBox" class="brackets">
       <div id="overlayTitle"></div>
@@ -192,6 +226,7 @@
 import * as THREE from 'three';
 import { CELL, ENEMY_TYPES, GRID_H, GRID_W, MAX_WAVE, TOWER_TYPES } from './src/game/config.js';
 import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enemyHealth, findPath, generateWave } from './src/game/rules.js';
+import { createTowerRewardPool, drawRewards } from './src/game/rewards.js';
 
 (function(){
   "use strict";
@@ -202,12 +237,14 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
   /* ---------------------------------------------------------------------
      STATE
   --------------------------------------------------------------------- */
-  let gold = 150, lives = 20, wave = 0, waveInProgress = false, gameOver = false;
+  let gold = 150, lives = 20, wave = 0, waveInProgress = false, gameOver = false, awaitingReward = false;
   let selectedTowerType = null;
   let selectedTower = null;
   let spawnQueue = [], spawnTimer = 0;
   let towers = [], enemies = [], projectiles = [], effects = [], pulses = [];
   let availableTowerKeys = new Set(Object.keys(TOWER_TYPES));
+  const rewardPool = createTowerRewardPool(TOWER_TYPES);
+  let currentRewards = [];
   let occupiedSet = new Set(), wallSet = new Set(), pathSet = new Set(), pathSetRoute = [];
   let routeVersion = 0;
   const startCell = {gx: 0, gy: 1};
@@ -697,7 +734,7 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
      WAVES
   --------------------------------------------------------------------- */
   function startWave(){
-    if(!canStartWave({wave, waveInProgress, gameOver})) return;
+    if(awaitingReward || !canStartWave({wave, waveInProgress, gameOver})) return;
     wave++;
     waveInProgress = true;
     spawnQueue = generateWave(wave);
@@ -716,13 +753,9 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
   }
 
   function checkWaveComplete(){
-    if(waveInProgress && spawnQueue.length===0 && enemies.length===0){
+    if(waveInProgress && !gameOver && spawnQueue.length===0 && enemies.length===0){
       waveInProgress = false;
-      if(wave >= MAX_WAVE){
-        triggerWin();
-      } else {
-        refreshWaveButton();
-      }
+      presentWaveReward();
     }
   }
 
@@ -843,6 +876,8 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
   const nodeCardsEl = document.getElementById('nodeCards');
   const selectedPanel = document.getElementById('selectedPanel');
   const messageEl = document.getElementById('message');
+  const rewardOverlay = document.getElementById('rewardOverlay');
+  const rewardCardsEl = document.getElementById('rewardCards');
   const overlay = document.getElementById('overlay');
   const overlayTitle = document.getElementById('overlayTitle');
   const overlaySubtitle = document.getElementById('overlaySubtitle');
@@ -851,8 +886,8 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
   function updateLivesUI(){ livesValEl.textContent = Math.max(0,Math.floor(lives)); }
   function updateWaveUI(){ waveValEl.textContent = wave; }
   function refreshWaveButton(){
-    waveBtn.disabled = waveInProgress || gameOver || wave>=MAX_WAVE;
-    waveBtn.textContent = wave>=MAX_WAVE ? 'ALL WAVES CLEARED' : (waveInProgress ? 'WAVE IN PROGRESS' : (wave===0 ? 'INITIATE WAVE' : 'NEXT WAVE'));
+    waveBtn.disabled = waveInProgress || awaitingReward || gameOver || wave>=MAX_WAVE;
+    waveBtn.textContent = wave>=MAX_WAVE ? 'ALL WAVES CLEARED' : (awaitingReward ? 'SELECT REWARD' : (waveInProgress ? 'WAVE IN PROGRESS' : (wave===0 ? 'INITIATE WAVE' : 'NEXT WAVE')));
   }
 
   function iconShape(shape,color){
@@ -901,6 +936,46 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
     messageEl.classList.add('show');
     clearTimeout(msgTimer);
     msgTimer = setTimeout(()=> messageEl.classList.remove('show'), 1400);
+  }
+
+  function buildRewardCards(){
+    rewardCardsEl.innerHTML = '';
+    currentRewards.forEach((reward)=>{
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'reward-card brackets';
+      card.dataset.key = reward.key;
+      card.innerHTML = `
+        <div class="node-icon">${iconShape(reward.shape, reward.color)}</div>
+        <div class="node-name">${reward.name}</div>
+        <div class="node-desc">${reward.description}</div>
+        <div class="reward-stats"><span>DMG ${reward.damage}</span><span>RNG ${reward.range}</span></div>
+      `;
+      card.addEventListener('click', ()=> selectReward(reward));
+      rewardCardsEl.appendChild(card);
+    });
+  }
+
+  function presentWaveReward(){
+    awaitingReward = true;
+    currentRewards = drawRewards(rewardPool, 3);
+    buildRewardCards();
+    rewardOverlay.classList.remove('hidden');
+    refreshWaveButton();
+  }
+
+  function selectReward(reward){
+    availableTowerKeys.add(reward.key);
+    awaitingReward = false;
+    currentRewards = [];
+    rewardCardsEl.innerHTML = '';
+    rewardOverlay.classList.add('hidden');
+    refreshNodeCards();
+    if(wave >= MAX_WAVE) triggerWin();
+    else {
+      refreshWaveButton();
+      showMessage(`${reward.name.toUpperCase()} ADDED TO INVENTORY`);
+    }
   }
 
   const selName = document.getElementById('selName');
@@ -1133,11 +1208,14 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
     wallSet.clear();
     Object.keys(wallMeshMap).forEach(key => delete wallMeshMap[key]);
     refreshRoute();
-    gold = 150; lives = 20; wave = 0; waveInProgress = false; gameOver = false;
+    gold = 150; lives = 20; wave = 0; waveInProgress = false; gameOver = false; awaitingReward = false;
     spawnQueue = []; spawnTimer = 0;
     availableTowerKeys = new Set(Object.keys(TOWER_TYPES));
+    currentRewards = [];
     selectedTowerType = null; clearPreview(); deselectTower();
     updateGoldUI(); updateLivesUI(); updateWaveUI(); refreshWaveButton(); refreshNodeCards();
+    rewardCardsEl.innerHTML = '';
+    rewardOverlay.classList.add('hidden');
     overlay.classList.add('hidden');
   }
 
@@ -1158,8 +1236,13 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
         enemyRouteStarts: enemies.map(enemy => [enemy.route[0].x, enemy.route[0].z]),
         towers: towers.length,
         previewVisible: Boolean(previewMesh),
-        enemies: enemies.length
+        enemies: enemies.length,
+        inventory: [...availableTowerKeys], awaitingReward,
+        rewardChoices: currentRewards.map((reward) => reward.key)
       };
+    },
+    showWaveRewardForTest(){
+      presentWaveReward();
     },
     projectCell(gx, gy){
       const p = gridToWorld(gx, gy).setY(0);
