@@ -20,10 +20,10 @@ describe('game rules', () => {
 
   it('validates free tower placement on walls', () => {
     expect(cellKey(2, 3)).toBe('2,3');
-    const availableTowerKeys = new Set(['filter']);
-    const placement = {gx: 2, gy: 3, isWall: true, occupied: new Set(), availableTowerKeys, typeKey: 'filter'};
+    const inventory = {tower: {filter: 2}};
+    const placement = {gx: 2, gy: 3, isWall: true, occupied: new Set(), inventory, typeKey: 'filter'};
     expect(canPlaceTower(placement)).toEqual({ok: true});
-    expect(canPlaceTower({...placement, availableTowerKeys: new Set()}).reason).toBe('unavailable');
+    expect(canPlaceTower({...placement, inventory: {tower: {filter: 0}}}).reason).toBe('unavailable');
     expect(canPlaceTower({...placement, isWall: false}).reason).toBe('wall');
     expect(canPlaceTower({...placement, occupied: new Set(['2,3'])}).reason).toBe('occupied');
   });
