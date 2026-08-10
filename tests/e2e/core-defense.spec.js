@@ -53,3 +53,18 @@ test('starts a wave after selecting a tower', async ({page}) => {
   await expect(page.locator('#waveBtn')).toBeDisabled();
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().enemies)).toBeGreaterThan(0);
 });
+
+test('updates active enemy routes when a wall is placed', async ({page}) => {
+  await page.goto('./');
+  await page.locator('#waveBtn').click();
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().enemies)).toBeGreaterThan(0);
+
+  const before = await page.evaluate(() => window.__CORE_DEFENSE__.getSceneState());
+  const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(1, 1));
+  await page.mouse.click(cell.x, cell.y);
+
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().walls)).toBe(1);
+  const after = await page.evaluate(() => window.__CORE_DEFENSE__.getSceneState());
+  expect(after.routeVersion).toBeGreaterThan(before.routeVersion);
+  expect(after.enemyRouteVersions.every((version) => version === after.routeVersion)).toBe(true);
+});

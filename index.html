@@ -210,6 +210,7 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
   let spawnQueue = [], spawnTimer = 0;
   let towers = [], enemies = [], projectiles = [], effects = [], pulses = [];
   let occupiedSet = new Set(), wallSet = new Set(), pathSet = new Set(), pathSetRoute = [];
+  let routeVersion = 0;
   const startCell = {gx: 0, gy: 1};
   const endCell = {gx: GRID_W - 1, gy: 6};
   const WALL_TOP = 0.78;
@@ -319,6 +320,31 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
     return route[route.length - 1].clone();
   }
 
+  function getDistanceAlongRoute(route, lengths, position){
+    let closestDistance = 0;
+    let closestDistanceSquared = Infinity;
+    let distanceBeforeSegment = 0;
+    for(let index = 0; index < lengths.length; index += 1){
+      const start = route[index];
+      const end = route[index + 1];
+      const segmentX = end.x - start.x;
+      const segmentZ = end.z - start.z;
+      const segmentLengthSquared = segmentX * segmentX + segmentZ * segmentZ;
+      const projection = segmentLengthSquared > 0
+        ? Math.min(1, Math.max(0, ((position.x - start.x) * segmentX + (position.z - start.z) * segmentZ) / segmentLengthSquared))
+        : 0;
+      const nearestX = start.x + segmentX * projection;
+      const nearestZ = start.z + segmentZ * projection;
+      const distanceSquared = (position.x - nearestX) ** 2 + (position.z - nearestZ) ** 2;
+      if(distanceSquared < closestDistanceSquared){
+        closestDistanceSquared = distanceSquared;
+        closestDistance = distanceBeforeSegment + lengths[index] * projection;
+      }
+      distanceBeforeSegment += lengths[index];
+    }
+    return closestDistance;
+  }
+
   markPathCells();
   buildPathMath();
 
@@ -370,6 +396,15 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
   function refreshRoute(){
     markPathCells();
     buildPathMath();
+    routeVersion += 1;
+    enemies.forEach(enemy => {
+      if(!enemy.alive) return;
+      enemy.route = worldWaypoints.map(point => point.clone());
+      enemy.routeLengths = segLengths.slice();
+      enemy.routeTotalLength = pathTotalLength;
+      enemy.traveled = getDistanceAlongRoute(enemy.route, enemy.routeLengths, enemy.mesh.position);
+      enemy.routeVersion = routeVersion;
+    });
     cellMeshList.forEach(mesh => setCellVisual(mesh.userData.gx, mesh.userData.gy));
   }
 
@@ -593,7 +628,7 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
       speed: type.speed, traveled: 0, alive: true, phase: Math.random()*10,
       goldValue: type.gold, lifeDamage: type.dmg,
       route: worldWaypoints.map(point => point.clone()),
-      routeLengths: segLengths.slice(), routeTotalLength: pathTotalLength
+      routeLengths: segLengths.slice(), routeTotalLength: pathTotalLength, routeVersion
     };
     enemies.push(enemy);
     return enemy;
@@ -1105,6 +1140,8 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
         mapCells: cellMeshList.length,
         walls: wallSet.size,
         routeCells: pathSetRoute.length,
+        routeVersion,
+        enemyRouteVersions: enemies.map(enemy => enemy.routeVersion),
         towers: towers.length,
         enemies: enemies.length
       };
