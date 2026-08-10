@@ -83,6 +83,7 @@
     background:var(--panel); border:1px solid var(--panel-border);
     backdrop-filter:blur(6px);
     padding:10px 12px; cursor:pointer; transition:all .15s ease;
+    color:var(--text); font:inherit; text-align:left;
   }
   .node-card:hover{border-color:var(--text-dim);}
   .node-card.active{border-color:var(--cyan); box-shadow:0 0 14px rgba(0,229,255,0.3); background:rgba(0,229,255,0.06);}
@@ -903,7 +904,8 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
       const inventoryCount = inventory.tower[cfg.key] || 0;
       if(inventoryCount < 1) return;
       for(let copyIndex = 0; copyIndex < inventoryCount; copyIndex++){
-        const card = document.createElement('div');
+        const card = document.createElement('button');
+        card.type = 'button';
         card.className = 'node-card';
         card.dataset.key = cfg.key;
         card.dataset.copy = copyIndex + 1;
