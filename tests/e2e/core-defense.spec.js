@@ -27,6 +27,7 @@ test('builds walls, places towers on them, and removes towers safely', async ({p
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState())).toMatchObject({towers: 1, walls: 1});
   await expect(page.locator('#goldVal')).toHaveText('100');
 
+  await page.mouse.click(cell.x, cell.y);
   await page.locator('#purgeBtn').click();
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState())).toMatchObject({towers: 0, walls: 1});
   await page.mouse.click(cell.x, cell.y);
