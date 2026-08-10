@@ -79,3 +79,17 @@ test('updates active enemy routes when a wall is placed', async ({page}) => {
   const [beforeX, beforeZ] = before.enemyPositions[0];
   expect(Math.hypot(beforeX - routeStartX, beforeZ - routeStartZ)).toBeLessThan(0.5);
 });
+
+test('shows three reward choices and adds the selected tower to inventory', async ({page}) => {
+  await page.goto('./');
+  await page.evaluate(() => window.__CORE_DEFENSE__.showWaveRewardForTest());
+
+  await expect(page.locator('#rewardOverlay')).toBeVisible();
+  await expect(page.locator('#rewardCards .reward-card')).toHaveCount(3);
+
+  const rewardKey = await page.locator('#rewardCards .reward-card').first().getAttribute('data-key');
+  await page.locator('#rewardCards .reward-card').first().click();
+
+  await expect(page.locator('#rewardOverlay')).toBeHidden();
+  await expect.poll(() => page.evaluate((key) => window.__CORE_DEFENSE__.getSceneState().inventory.includes(key), rewardKey)).toBe(true);
+});
