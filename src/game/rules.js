@@ -15,13 +15,13 @@ export function generateWave(wave) {
   return list;
 }
 
-export function canPlaceTower({gx, gy, isWall, occupied, gold, typeKey}) {
+export function canPlaceTower({gx, gy, isWall, occupied, availableTowerKeys, typeKey}) {
   const tower = TOWER_TYPES[typeKey];
   if (!tower) return {ok: false, reason: 'unknown-type'};
+  if (!availableTowerKeys.has(typeKey)) return {ok: false, reason: 'unavailable'};
   if (!isWall) return {ok: false, reason: 'wall'};
   if (occupied.has(cellKey(gx, gy))) return {ok: false, reason: 'occupied'};
-  if (gold < tower.cost) return {ok: false, reason: 'insufficient-gold'};
-  return {ok: true, cost: tower.cost};
+  return {ok: true};
 }
 
 /** Finds a four-direction grid route between two cells. */
@@ -74,11 +74,6 @@ export function canRemoveWall({gx, gy, walls, occupied}) {
   if (!walls.has(key)) return {ok: false, reason: 'no-wall'};
   if (occupied.has(key)) return {ok: false, reason: 'tower-on-wall'};
   return {ok: true};
-}
-
-export function towerRefund(typeKey) {
-  const tower = TOWER_TYPES[typeKey];
-  return tower ? Math.floor(tower.cost * 0.6) : 0;
 }
 
 export function enemyHealth(typeKey, wave) {

@@ -4,9 +4,9 @@ export const CELL = 2;
 export const MAX_WAVE = 10;
 
 export const TOWER_TYPES = {
-  filter: {key: 'filter', name: 'Packet Filter', cost: 50, damage: 8, range: 4.2, fireRate: 2.5, splash: 0, color: 0x00e5ff, shape: 'diamond', desc: 'Fast, low-yield suppression node.'},
-  purge: {key: 'purge', name: 'Purge Cannon', cost: 110, damage: 24, range: 3.6, fireRate: 0.9, splash: 1.5, color: 0xff9500, shape: 'circle', desc: 'Blast radius vs clustered intrusions.'},
-  daemon: {key: 'daemon', name: 'Snipe Daemon', cost: 170, damage: 60, range: 7.2, fireRate: 0.55, splash: 0, color: 0xd926ff, shape: 'triangle', desc: 'Long-range precision strike node.'}
+  filter: {key: 'filter', name: 'Packet Filter', damage: 8, range: 4.2, fireRate: 2.5, splash: 0, color: 0x00e5ff, shape: 'diamond', desc: 'Fast, low-yield suppression node.'},
+  purge: {key: 'purge', name: 'Purge Cannon', damage: 24, range: 3.6, fireRate: 0.9, splash: 1.5, color: 0xff9500, shape: 'circle', desc: 'Blast radius vs clustered intrusions.'},
+  daemon: {key: 'daemon', name: 'Snipe Daemon', damage: 60, range: 7.2, fireRate: 0.55, splash: 0, color: 0xd926ff, shape: 'triangle', desc: 'Long-range precision strike node.'}
 };
 
 export const ENEMY_TYPES = {
