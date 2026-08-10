@@ -244,7 +244,7 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
   let spawnQueue = [], spawnTimer = 0;
   let towers = [], enemies = [], projectiles = [], effects = [], pulses = [];
   const rewardPool = createTowerRewardPool(TOWER_TYPES);
-  let inventory = {tower: rewardPool.map((reward) => ({...reward}))};
+  let inventory = rewardPool.map((reward) => ({...reward}));
   let currentRewards = [];
   let occupiedSet = new Set(), wallSet = new Set(), pathSet = new Set(), pathSetRoute = [];
   let routeVersion = 0;
@@ -900,7 +900,7 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
 
   function buildNodeCards(){
     nodeCardsEl.innerHTML = '';
-    inventory.tower.forEach((item)=>{
+    inventory.forEach((item)=>{
       const cfg = TOWER_TYPES[item.key];
       if(!cfg) return;
       const card = document.createElement('div');
@@ -914,7 +914,7 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
         <div class="node-desc">${cfg.desc}</div>
       `;
       card.addEventListener('click', ()=>{
-        if(gameOver || !inventory.tower.some((inventoryItem) => inventoryItem.key === cfg.key)) return;
+        if(gameOver || !inventory.some((inventoryItem) => inventoryItem.type === 'tower' && inventoryItem.key === cfg.key)) return;
         if(selectedTowerType === cfg.key){
           selectedTowerType = null;
           clearPreview();
@@ -1213,7 +1213,7 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
     refreshRoute();
     gold = 150; lives = 20; wave = 0; waveInProgress = false; gameOver = false; awaitingReward = false;
     spawnQueue = []; spawnTimer = 0;
-    inventory = {tower: rewardPool.map((reward) => ({...reward}))};
+    inventory = rewardPool.map((reward) => ({...reward}));
     currentRewards = [];
     selectedTowerType = null; clearPreview(); deselectTower();
     updateGoldUI(); updateLivesUI(); updateWaveUI(); refreshWaveButton(); refreshNodeCards();
@@ -1240,7 +1240,7 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
         towers: towers.length,
         previewVisible: Boolean(previewMesh),
         enemies: enemies.length,
-        inventory: inventory.tower.map((item) => item.key), awaitingReward,
+        inventory: inventory.map((item) => item.key), awaitingReward,
         rewardChoices: currentRewards.map((reward) => reward.key)
       };
     },

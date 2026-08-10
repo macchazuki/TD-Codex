@@ -16,7 +16,7 @@ export function generateWave(wave) {
 }
 
 function hasTowerInventoryItem(inventory, typeKey) {
-  return inventory?.tower?.some((item) => item.key === typeKey) || false;
+  return inventory?.some((item) => item.type === 'tower' && item.key === typeKey) || false;
 }
 
 export function canPlaceTower({gx, gy, isWall, occupied, inventory, typeKey}) {

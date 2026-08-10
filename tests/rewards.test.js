@@ -13,21 +13,21 @@ describe('rewards', () => {
   });
 
   it('adds each reward as a separate inventory item', () => {
-    const inventory = {tower: []};
+    const inventory = [];
     addRewardToInventory(inventory, {type: 'tower', key: 'filter'});
     addRewardToInventory(inventory, {type: 'tower', key: 'filter'});
 
-    expect(inventory.tower).toHaveLength(2);
-    expect(inventory.tower[0]).not.toBe(inventory.tower[1]);
+    expect(inventory).toHaveLength(2);
+    expect(inventory[0]).not.toBe(inventory[1]);
   });
 
   it('removes one inventory copy only when available', () => {
-    const inventory = {tower: [{type: 'tower', key: 'filter'}, {type: 'tower', key: 'filter'}]};
+    const inventory = [{type: 'tower', key: 'filter'}, {type: 'tower', key: 'filter'}];
 
     expect(removeFromInventory(inventory, 'tower', 'filter')).toBe(true);
-    expect(inventory.tower).toHaveLength(1);
+    expect(inventory).toHaveLength(1);
     expect(removeFromInventory(inventory, 'tower', 'filter')).toBe(true);
     expect(removeFromInventory(inventory, 'tower', 'filter')).toBe(false);
-    expect(inventory.tower).toHaveLength(0);
+    expect(inventory).toHaveLength(0);
   });
 });
