@@ -218,17 +218,28 @@ import { canPlaceTower, canStartWave, enemyHealth, generateWave, towerRefund } f
   const canvas = document.getElementById('gameCanvas');
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x060a14);
-  scene.fog = new THREE.FogExp2(0x060a14, 0.032);
+  // Keep the board readable at the default orbit distance. The board is
+  // intentionally wide, so a dense fog makes its far edge disappear.
+  scene.fog = new THREE.FogExp2(0x060a14, 0.012);
 
   const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 200);
-  const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:'high-performance'});
+  } catch(error) {
+    canvas.dataset.renderStatus = 'error';
+    canvas.setAttribute('aria-label', '3D renderer unavailable');
+    console.error('CORE://DEFENSE could not initialize WebGL.', error);
+    throw error;
+  }
+  canvas.dataset.renderStatus = 'ready';
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   // camera orbit
-  let camAzimuth = 0.55, camElevation = 0.95, camDistance = 24;
+  let camAzimuth = 0.55, camElevation = 0.95, camDistance = 36;
   const camTarget = new THREE.Vector3(0,0,0);
   function updateCamera(){
     camera.position.set(
@@ -316,10 +327,10 @@ import { canPlaceTower, canStartWave, enemyHealth, generateWave, towerRefund } f
   const cellMeshList = [];
   const cellMeshMap = {};
 
-  const buildableMat = new THREE.MeshStandardMaterial({color:0x101a2e, roughness:0.85, metalness:0.1});
+  const buildableMat = new THREE.MeshStandardMaterial({color:0x172743, emissive:0x07101e, emissiveIntensity:0.7, roughness:0.85, metalness:0.1});
   const buildableHoverOkMat = new THREE.MeshStandardMaterial({color:0x123322, emissive:0x0d5c2f, emissiveIntensity:0.6, roughness:0.7});
   const buildableHoverBadMat = new THREE.MeshStandardMaterial({color:0x331515, emissive:0x7a1020, emissiveIntensity:0.6, roughness:0.7});
-  const pathMat = new THREE.MeshStandardMaterial({color:0x0a2230, emissive:0x00323f, emissiveIntensity:0.55, roughness:0.6});
+  const pathMat = new THREE.MeshStandardMaterial({color:0x0d3042, emissive:0x005d74, emissiveIntensity:0.9, roughness:0.6});
   const occupiedMat = new THREE.MeshStandardMaterial({color:0x161f30, roughness:0.9});
 
   const cellGeo = new THREE.BoxGeometry(CELL*0.9, 0.2, CELL*0.9);
@@ -991,6 +1002,30 @@ import { canPlaceTower, canStartWave, enemyHealth, generateWave, towerRefund } f
     updateGoldUI(); updateLivesUI(); updateWaveUI(); refreshWaveButton(); refreshNodeCards();
     overlay.classList.add('hidden');
   }
+
+  // Lightweight inspection surface for browser tests and deployment
+  // diagnostics. It exposes state only; gameplay still goes through the
+  // same input handlers and rules as a normal player session.
+  window.__CORE_DEFENSE__ = {
+    getSceneState(){
+      return {
+        renderStatus: canvas.dataset.renderStatus || 'unknown',
+        renderCalls: renderer.info.render.calls,
+        mapCells: cellMeshList.length,
+        towers: towers.length,
+        enemies: enemies.length
+      };
+    },
+    projectCell(gx, gy){
+      const p = gridToWorld(gx, gy).setY(0);
+      p.project(camera);
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: rect.left + (p.x + 1) * rect.width / 2,
+        y: rect.top + (-p.y + 1) * rect.height / 2
+      };
+    }
+  };
 
   /* ---------------------------------------------------------------------
      MAIN LOOP
