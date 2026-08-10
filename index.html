@@ -77,9 +77,10 @@
     margin:0 14px 14px 14px;
   }
 
-  #nodeCards{display:flex; gap:10px; flex-wrap:wrap;}
+  #nodeCards{display:flex; align-items:flex-start; align-content:flex-start; gap:10px; flex-wrap:wrap;}
   .node-card{
     width:150px;
+    flex:0 0 auto;
     background:var(--panel); border:1px solid var(--panel-border);
     backdrop-filter:blur(6px);
     padding:10px 12px; cursor:pointer; transition:all .15s ease;
