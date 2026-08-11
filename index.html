@@ -21,7 +21,7 @@
   *{box-sizing:border-box; margin:0; padding:0;}
   html,body{width:100%; height:100%; overflow:hidden; background:var(--bg); font-family:'Space Mono',monospace; color:var(--text);}
   #app{position:relative; width:100vw; height:100vh;}
-  canvas{display:block; width:100%; height:100%;}
+  canvas{display:block; width:100%; height:100%; touch-action:none;}
 
   .brackets{
     position:relative;
@@ -153,6 +153,7 @@
     position:absolute; inset:0; background:rgba(4,6,12,0.86); backdrop-filter:blur(4px);
     display:flex; align-items:center; justify-content:center; z-index:15;
   }
+  #mobileHint{display:none;}
   #rewardOverlay.hidden{display:none;}
   #rewardBox{width:min(720px, calc(100vw - 32px)); padding:30px; border:1px solid var(--panel-border); background:var(--panel);}
   #rewardTitle{font-family:'Orbitron',sans-serif; color:var(--cyan); font-size:24px; letter-spacing:2px; text-align:center;}
@@ -183,6 +184,8 @@
     .brand{font-size:14px;}
     .node-card{width:110px;}
     .node-desc{display:none;}
+    #desktopHint{display:none;}
+    #mobileHint{display:inline;}
   }
 </style>
 </head>
@@ -219,7 +222,7 @@
         <button id="purgeBtn">PURGE NODE</button>
       </div>
     </div>
-    <div id="hint">LEFT-DRAG: place walls · RIGHT-DRAG: remove walls · CLICK: select node or tile &nbsp;·&nbsp; SCROLL: zoom</div>
+    <div id="hint"><span id="desktopHint">LEFT-DRAG: place walls · RIGHT-DRAG: remove walls · CLICK: select node or tile &nbsp;·&nbsp; SCROLL: zoom</span><span id="mobileHint">1-FINGER DRAG: PLACE/CLEAR WALLS · 2-FINGER DRAG: PAN · PINCH: ZOOM</span></div>
   </div>
 
   <div id="rewardOverlay" class="hidden" aria-labelledby="rewardTitle">
@@ -1177,6 +1180,11 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
   const raycaster = new THREE.Raycaster();
   const mouseNDC = new THREE.Vector2();
   let wallEditAction = null, lastEditedCellKey = null;
+  let touchEditStartCell = null;
+  const activeTouchPointers = new Map();
+  const touchGesture = {midpoint: null, distance: 0};
+  const CAMERA_TARGET_MARGIN = CELL * 2;
+  let mousePanPoint = null;
 
   function setMouseFromEvent(e){
     const rect = canvas.getBoundingClientRect();
@@ -1209,7 +1217,188 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
     if(placement.ok) placeWall(gx, gy);
   }
 
+  function resetWallEditing(){
+    wallEditAction = null;
+    lastEditedCellKey = null;
+    touchEditStartCell = null;
+  }
+
+  function placeSelectedAtPointer(e){
+    const cell = getCellAtPointer(e);
+    if(!cell) return;
+    const {gx, gy} = cell;
+    const key = cellKey(gx, gy);
+    const towerOnCell = towers.find(tower => cellKey(tower.gx, tower.gy) === key);
+    if(towerOnCell){ selectTower(towerOnCell); return; }
+    const isTile = Boolean(selectedTileType);
+    const typeKey = isTile ? selectedTileType : selectedTowerType;
+    const placement = isTile
+      ? canPlaceTile({gx, gy, gridW: GRID_W, gridH: GRID_H, occupied: occupiedSet, tiles, inventory, typeKey})
+      : canPlaceTower({gx, gy, isWall: wallSet.has(key), occupied: occupiedSet, inventory, typeKey});
+    if(!placement.ok){
+      const messages = {wall:'DEPLOY A WALL FIRST', occupied:'NODE SLOT OCCUPIED', 'tower-on-cell':'NODE SLOT OCCUPIED', unavailable:'NO ITEM IN INVENTORY', 'tile-exists':'CELL ALREADY HAS A TILE'};
+      showMessage(messages[placement.reason] || 'INVALID NODE DEPLOYMENT');
+      return;
+    }
+    if(isTile){
+      placeTile(gx, gy, typeKey);
+      removeFromInventory(inventory, 'tile', typeKey);
+    } else {
+      const inventoryItem = inventory.find((item) => item.type === 'tower' && item.key === selectedTowerType);
+      placeTower(gx, gy, selectedTowerType, inventoryItem);
+      removeInventoryItem(inventory, inventoryItem);
+    }
+    selectedTowerType = null;
+    selectedTileType = null;
+    clearPreview();
+    refreshNodeCards();
+  }
+
+  function handlePrimaryPointerDown(e, wallAction, shouldDeferWallEdit = false){
+    if(gameOver) return;
+    setMouseFromEvent(e);
+    raycaster.setFromCamera(mouseNDC, camera);
+    const towerHits = raycaster.intersectObjects(towersGroup.children, true);
+    if(towerHits.length){
+      let obj = towerHits[0].object;
+      while(obj && !obj.userData.towerRef) obj = obj.parent;
+      if(obj && obj.userData.towerRef){ selectTower(obj.userData.towerRef); return; }
+    }
+    if(selectedTowerType || selectedTileType){
+      placeSelectedAtPointer(e);
+      return;
+    }
+
+    const cell = getCellAtPointer(e);
+    if(!cell){
+      deselectTower();
+      return;
+    }
+    const key = cellKey(cell.gx, cell.gy);
+    const towerOnCell = towers.find(tower => cellKey(tower.gx, tower.gy) === key);
+    if(towerOnCell){
+      selectTower(towerOnCell);
+      return;
+    }
+    wallEditAction = wallAction;
+    lastEditedCellKey = null;
+    if(!shouldDeferWallEdit) editWallCell(cell.gx, cell.gy, wallEditAction);
+  }
+
+  function clampCameraTarget(){
+    const maxX = ((GRID_W - 1) / 2) * CELL + CAMERA_TARGET_MARGIN;
+    const maxZ = ((GRID_H - 1) / 2) * CELL + CAMERA_TARGET_MARGIN;
+    camTarget.x = THREE.MathUtils.clamp(camTarget.x, -maxX, maxX);
+    camTarget.z = THREE.MathUtils.clamp(camTarget.z, -maxZ, maxZ);
+  }
+
+  function getBoardPoint(clientX, clientY){
+    setMouseFromEvent({clientX, clientY});
+    raycaster.setFromCamera(mouseNDC, camera);
+    return raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), new THREE.Vector3());
+  }
+
+  function getTouchPair(){
+    return [...activeTouchPointers.values()].slice(0, 2);
+  }
+
+  function initializeTouchGesture(){
+    const [first, second] = getTouchPair();
+    if(!first || !second) return;
+    touchGesture.midpoint = {x: (first.x + second.x) / 2, y: (first.y + second.y) / 2};
+    touchGesture.distance = Math.hypot(first.x - second.x, first.y - second.y);
+  }
+
+  function updateTouchCamera(){
+    const [first, second] = getTouchPair();
+    if(!first || !second || !touchGesture.midpoint) return;
+    const midpoint = {x: (first.x + second.x) / 2, y: (first.y + second.y) / 2};
+    const previousBoardPoint = getBoardPoint(touchGesture.midpoint.x, touchGesture.midpoint.y);
+    const currentBoardPoint = getBoardPoint(midpoint.x, midpoint.y);
+    if(previousBoardPoint && currentBoardPoint){
+      camTarget.add(previousBoardPoint.sub(currentBoardPoint));
+      clampCameraTarget();
+    }
+    const distance = Math.hypot(first.x - second.x, first.y - second.y);
+    camDistance = THREE.MathUtils.clamp(camDistance - (distance - touchGesture.distance) * 0.04, 10, 40);
+    touchGesture.midpoint = midpoint;
+    touchGesture.distance = distance;
+  }
+
+  function resetTouchGesture(){
+    activeTouchPointers.clear();
+    touchGesture.midpoint = null;
+    touchGesture.distance = 0;
+    resetWallEditing();
+  }
+
+  function resetMousePanning(){
+    mousePanPoint = null;
+  }
+
+  function updateMousePan(e){
+    if(!mousePanPoint) return;
+    const currentPoint = getBoardPoint(e.clientX, e.clientY);
+    if(currentPoint){
+      const previousPoint = getBoardPoint(mousePanPoint.x, mousePanPoint.y);
+      if(previousPoint) camTarget.add(previousPoint.sub(currentPoint));
+      clampCameraTarget();
+    }
+    mousePanPoint = {x: e.clientX, y: e.clientY};
+  }
+
+  function handleTouchPointerDown(e){
+    e.preventDefault();
+    activeTouchPointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    if(activeTouchPointers.size === 1){
+      const cell = getCellAtPointer(e);
+      const wallAction = cell && wallSet.has(cellKey(cell.gx, cell.gy)) ? 'remove' : 'place';
+      handlePrimaryPointerDown(e, wallAction, true);
+      if(wallEditAction && cell) touchEditStartCell = cell;
+      return;
+    }
+    resetWallEditing();
+    if(activeTouchPointers.size === 2) initializeTouchGesture();
+  }
+
+  function handleTouchPointerMove(e){
+    if(!activeTouchPointers.has(e.pointerId)) return;
+    e.preventDefault();
+    activeTouchPointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    if(activeTouchPointers.size === 2){
+      updateTouchCamera();
+      return;
+    }
+    if(wallEditAction){
+      if(touchEditStartCell){
+        editWallCell(touchEditStartCell.gx, touchEditStartCell.gy, wallEditAction);
+        touchEditStartCell = null;
+      }
+      const cell = getCellAtPointer(e);
+      if(cell) editWallCell(cell.gx, cell.gy, wallEditAction);
+    }
+  }
+
+  function handleTouchPointerEnd(e){
+    if(!activeTouchPointers.has(e.pointerId)) return;
+    e.preventDefault();
+    if(activeTouchPointers.size === 1 && wallEditAction && e.type === 'pointerup'){
+      if(touchEditStartCell){
+        editWallCell(touchEditStartCell.gx, touchEditStartCell.gy, wallEditAction);
+        touchEditStartCell = null;
+      }
+      const cell = getCellAtPointer(e);
+      if(cell) editWallCell(cell.gx, cell.gy, wallEditAction);
+    }
+    activeTouchPointers.delete(e.pointerId);
+    resetTouchGesture();
+  }
+
   canvas.addEventListener('pointerdown', (e)=>{
+    if(e.pointerType === 'touch'){
+      handleTouchPointerDown(e);
+      return;
+    }
     if(e.button === 2){
       if(!gameOver){
         wallEditAction = 'remove';
@@ -1219,71 +1408,24 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
       }
       return;
     }
+    if(e.button === 1){
+      resetWallEditing();
+      mousePanPoint = {x: e.clientX, y: e.clientY};
+      return;
+    }
     if(e.button !== 0 || gameOver) return;
-    setMouseFromEvent(e);
-    raycaster.setFromCamera(mouseNDC, camera);
-
-    const towerHits = raycaster.intersectObjects(towersGroup.children, true);
-    if(towerHits.length){
-      let obj = towerHits[0].object;
-      while(obj && !obj.userData.towerRef) obj = obj.parent;
-      if(obj && obj.userData.towerRef){ selectTower(obj.userData.towerRef); return; }
-    }
-
-    if(selectedTowerType || selectedTileType){
-      const cellHits = raycaster.intersectObjects(cellMeshList);
-      if(cellHits.length){
-        const {gx, gy} = cellHits[0].object.userData;
-        const key = gx+','+gy;
-        const towerOnCell = towers.find(tower => cellKey(tower.gx, tower.gy) === key);
-        if(towerOnCell){
-          selectTower(towerOnCell);
-          return;
-        }
-        const isTile = Boolean(selectedTileType);
-        const typeKey = isTile ? selectedTileType : selectedTowerType;
-        const cfg = isTile ? SPECIAL_TILE_TYPES[typeKey] : TOWER_TYPES[typeKey];
-        const placement = isTile
-          ? canPlaceTile({gx, gy, gridW: GRID_W, gridH: GRID_H, occupied: occupiedSet, tiles, inventory, typeKey})
-          : canPlaceTower({gx, gy, isWall: wallSet.has(key), occupied: occupiedSet, inventory, typeKey});
-        if(!placement.ok){
-          const messages = {wall:'DEPLOY A WALL FIRST', occupied:'NODE SLOT OCCUPIED', 'tower-on-cell':'NODE SLOT OCCUPIED', unavailable:'NO ITEM IN INVENTORY', 'tile-exists':'CELL ALREADY HAS A TILE'};
-          showMessage(messages[placement.reason] || 'INVALID NODE DEPLOYMENT');
-          return;
-        }
-        if(isTile) placeTile(gx, gy, typeKey);
-        else {
-          const inventoryItem = inventory.find((item) => item.type === 'tower' && item.key === selectedTowerType);
-          placeTower(gx, gy, selectedTowerType, inventoryItem);
-        }
-        if(isTile) removeFromInventory(inventory, 'tile', typeKey);
-        else removeInventoryItem(inventory, inventory.find((item) => item.type === 'tower' && item.key === typeKey));
-        selectedTowerType = null;
-        selectedTileType = null;
-        clearPreview();
-        refreshNodeCards();
-        return;
-      }
-    } else {
-      wallEditAction = 'place';
-      lastEditedCellKey = null;
-      const cellHits = raycaster.intersectObjects(cellMeshList);
-      if(cellHits.length){
-        const {gx, gy} = cellHits[0].object.userData;
-        const key = cellKey(gx, gy);
-        const towerOnCell = towers.find(tower => cellKey(tower.gx, tower.gy) === key);
-        if(towerOnCell){
-          selectTower(towerOnCell);
-          return;
-        }
-        editWallCell(gx, gy, 'place');
-        return;
-      }
-      deselectTower();
-    }
+    handlePrimaryPointerDown(e, 'place');
   });
 
   window.addEventListener('pointermove', (e)=>{
+    if(e.pointerType === 'touch'){
+      handleTouchPointerMove(e);
+      return;
+    }
+    if(mousePanPoint){
+      updateMousePan(e);
+      return;
+    }
     if(wallEditAction){
       const cell = getCellAtPointer(e);
       if(cell) editWallCell(cell.gx, cell.gy, wallEditAction);
@@ -1318,9 +1460,21 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
       }
     }
   });
-  window.addEventListener('pointerup', ()=>{
-    wallEditAction = null;
-    lastEditedCellKey = null;
+  window.addEventListener('pointerup', (e)=>{
+    if(e.pointerType === 'touch'){
+      handleTouchPointerEnd(e);
+      return;
+    }
+    resetMousePanning();
+    resetWallEditing();
+  });
+  window.addEventListener('pointercancel', (e)=>{
+    if(e.pointerType === 'touch') handleTouchPointerEnd(e);
+    else resetMousePanning();
+  });
+  window.addEventListener('blur', ()=>{
+    resetTouchGesture();
+    resetMousePanning();
   });
 
   canvas.addEventListener('wheel', (e)=>{
@@ -1409,6 +1563,9 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
         towerStats: towers.map((tower) => ({key: tower.key, gx: tower.gx, gy: tower.gy, damage: tower.damage, range: tower.range, fireRate: tower.fireRate, activeTile: tower.activeTile})),
         towerUpgrades: towers.map((tower) => ({...tower.upgrades})),
         previewVisible: Boolean(previewMesh),
+        wallEditAction,
+        cameraTarget: {x: camTarget.x, y: camTarget.y, z: camTarget.z},
+        cameraDistance: camDistance,
         enemies: enemies.length,
         inventory: inventory.map((item) => item.key),
         inventoryItems: inventory.map((item) => ({type: item.type, key: item.key})),
