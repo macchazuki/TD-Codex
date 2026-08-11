@@ -145,6 +145,20 @@ test('shows the desktop control hint', async ({page}) => {
   await expect(page.locator('#mobileHint')).toBeHidden();
 });
 
+test('pans the camera with a middle-button drag', async ({page}) => {
+  await page.goto('./');
+  const start = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(4, 3));
+  const before = await page.evaluate(() => window.__CORE_DEFENSE__.getSceneState());
+
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down({button: 'middle'});
+  await page.mouse.move(start.x + 80, start.y + 30, {steps: 3});
+  await page.mouse.up({button: 'middle'});
+
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().cameraTarget)).not.toEqual(before.cameraTarget);
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().walls)).toBe(before.walls);
+});
+
 test('starts with one deterministic tile of each type', async ({page}) => {
   await page.goto('./');
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().tiles)).toEqual([

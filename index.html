@@ -1184,6 +1184,7 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
   const activeTouchPointers = new Map();
   const touchGesture = {midpoint: null, distance: 0};
   const CAMERA_TARGET_MARGIN = CELL * 2;
+  let mousePanPoint = null;
 
   function setMouseFromEvent(e){
     const rect = canvas.getBoundingClientRect();
@@ -1331,6 +1332,21 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
     resetWallEditing();
   }
 
+  function resetMousePanning(){
+    mousePanPoint = null;
+  }
+
+  function updateMousePan(e){
+    if(!mousePanPoint) return;
+    const currentPoint = getBoardPoint(e.clientX, e.clientY);
+    if(currentPoint){
+      const previousPoint = getBoardPoint(mousePanPoint.x, mousePanPoint.y);
+      if(previousPoint) camTarget.add(previousPoint.sub(currentPoint));
+      clampCameraTarget();
+    }
+    mousePanPoint = {x: e.clientX, y: e.clientY};
+  }
+
   function handleTouchPointerDown(e){
     e.preventDefault();
     activeTouchPointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
@@ -1392,6 +1408,11 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
       }
       return;
     }
+    if(e.button === 1){
+      resetWallEditing();
+      mousePanPoint = {x: e.clientX, y: e.clientY};
+      return;
+    }
     if(e.button !== 0 || gameOver) return;
     handlePrimaryPointerDown(e, 'place');
   });
@@ -1399,6 +1420,10 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
   window.addEventListener('pointermove', (e)=>{
     if(e.pointerType === 'touch'){
       handleTouchPointerMove(e);
+      return;
+    }
+    if(mousePanPoint){
+      updateMousePan(e);
       return;
     }
     if(wallEditAction){
@@ -1440,12 +1465,17 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
       handleTouchPointerEnd(e);
       return;
     }
+    resetMousePanning();
     resetWallEditing();
   });
   window.addEventListener('pointercancel', (e)=>{
     if(e.pointerType === 'touch') handleTouchPointerEnd(e);
+    else resetMousePanning();
   });
-  window.addEventListener('blur', resetTouchGesture);
+  window.addEventListener('blur', ()=>{
+    resetTouchGesture();
+    resetMousePanning();
+  });
 
   canvas.addEventListener('wheel', (e)=>{
     e.preventDefault();
