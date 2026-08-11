@@ -34,7 +34,7 @@ export const SPECIAL_TILE_TYPES = {
 
 export const INITIAL_TILES = [
   {type: 'tile', key: 'slow', gx: 2, gy: 1},
-  {type: 'tile', key: 'dot', gx: 5, gy: 5},
+  {type: 'tile', key: 'dot', gx: 0, gy: 1},
   {type: 'tile', key: 'buff', gx: 3, gy: 3}
 ];
 
