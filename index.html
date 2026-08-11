@@ -475,6 +475,7 @@ import { INITIAL_TILES, SPECIAL_TILE_TYPES, applyDotTick, canPlaceTile, getEffec
     mesh.userData = {gx, gy};
     wallGroup.add(mesh);
     wallMeshMap[key] = mesh;
+    if(getTileAt(tiles, gx, gy)) renderTile(getTileAt(tiles, gx, gy));
     refreshRoute();
   }
 
@@ -484,6 +485,7 @@ import { INITIAL_TILES, SPECIAL_TILE_TYPES, applyDotTick, canPlaceTile, getEffec
     if(mesh) wallGroup.remove(mesh);
     delete wallMeshMap[key];
     wallSet.delete(key);
+    if(getTileAt(tiles, gx, gy)) renderTile(getTileAt(tiles, gx, gy));
     refreshRoute();
   }
 
@@ -498,7 +500,7 @@ import { INITIAL_TILES, SPECIAL_TILE_TYPES, applyDotTick, canPlaceTile, getEffec
     marker.position.y = 0.34;
     group.add(base, marker);
     const p = gridToWorld(tile.gx, tile.gy);
-    group.position.set(p.x, 0, p.z);
+    group.position.set(p.x, wallSet.has(cellKey(tile.gx, tile.gy)) ? 0.5 : 0, p.z);
     group.userData.tileRef = tile;
     return group;
   }
