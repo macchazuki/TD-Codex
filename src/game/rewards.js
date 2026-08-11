@@ -25,7 +25,8 @@ export function createTowerRewardPool(towerTypes) {
     cost: tower.cost,
     damage: tower.damage,
     range: tower.range,
-    fireRate: tower.fireRate
+    fireRate: tower.fireRate,
+    upgrades: {damage: 0, range: 0, fireRate: 0}
   }));
 }
 
@@ -41,6 +42,14 @@ export function addRewardToInventory(inventory, reward) {
 /** Removes one matching inventory object when it is deployed. */
 export function removeFromInventory(inventory, rewardType, rewardKey) {
   const itemIndex = inventory.findIndex((item) => item.type === rewardType && item.key === rewardKey);
+  if (itemIndex < 0) return false;
+  inventory.splice(itemIndex, 1);
+  return true;
+}
+
+/** Removes one exact inventory object, preserving the selected tower copy. */
+export function removeInventoryItem(inventory, item) {
+  const itemIndex = inventory.indexOf(item);
   if (itemIndex < 0) return false;
   inventory.splice(itemIndex, 1);
   return true;

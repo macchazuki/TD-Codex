@@ -44,6 +44,34 @@ test('builds walls, places towers on them, and removes towers safely', async ({p
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().walls)).toBe(0);
 });
 
+test('purchases escalating upgrades and preserves them through purge', async ({page}) => {
+  await page.goto('./');
+  const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
+  await page.mouse.click(cell.x, cell.y);
+  await page.locator('#nodeCards .node-card').first().click();
+  await page.mouse.click(cell.x, cell.y);
+  await page.mouse.click(cell.x, cell.y);
+
+  await expect(page.locator('#selectedPanel')).toBeVisible();
+  await expect(page.locator('#damageUpgradeCost')).toHaveText('⬡ 40');
+  await page.locator('#upgradeDamageBtn').click();
+  await expect(page.locator('#goldVal')).toHaveText('110');
+  await expect(page.locator('#damageUpgradeCost')).toHaveText('⬡ 60');
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState())).toMatchObject({
+    towerUpgrades: [{damage: 1, range: 0, fireRate: 0}],
+    towerStats: [{damage: 9.6, range: 4.2, fireRate: 2.5}]
+  });
+
+  await page.locator('#purgeBtn').click();
+  await page.locator('#nodeCards .node-card[data-key="filter"]').click();
+  await page.mouse.click(cell.x, cell.y);
+  await page.mouse.click(cell.x, cell.y);
+
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState())).toMatchObject({
+    towerUpgrades: [{damage: 1, range: 0, fireRate: 0}]
+  });
+});
+
 test('starts a wave after selecting a tower', async ({page}) => {
   await page.goto('./');
   const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
