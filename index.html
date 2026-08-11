@@ -103,6 +103,15 @@
   #selectedPanel h3{font-family:'Orbitron',sans-serif; font-size:13px; letter-spacing:1px; margin-bottom:8px;}
   #selectedPanel .row{display:flex; justify-content:space-between; font-size:11px; color:var(--text-dim); margin-bottom:4px;}
   #selectedPanel .row b{color:var(--text); font-weight:400;}
+  #selectedDescription{font-size:10px; color:var(--text-dim); line-height:1.4; margin-bottom:8px;}
+  #tileTooltip{
+    position:absolute; z-index:4; width:220px; padding:10px 12px;
+    background:var(--panel); border:1px solid #38ff8a; box-shadow:0 0 14px rgba(56,255,138,0.22);
+    backdrop-filter:blur(6px); pointer-events:none; transition:opacity .12s ease;
+  }
+  #tileTooltip.hidden{display:none;}
+  #tileTooltip h3{font-family:'Orbitron',sans-serif; font-size:11px; letter-spacing:.7px; margin-bottom:5px; color:#38ff8a;}
+  #tileTooltip p{font-size:10px; color:var(--text-dim); line-height:1.4;}
   .upgrade-actions{display:flex; flex-direction:column; gap:4px; margin-top:8px;}
   .upgrade-btn{
     display:flex; justify-content:space-between; align-items:center; width:100%; padding:6px 8px;
@@ -192,6 +201,10 @@
 <body>
 <div id="app">
   <canvas id="gameCanvas"></canvas>
+  <div id="tileTooltip" class="hidden" role="status" aria-live="polite">
+    <h3 id="tileTooltipName"></h3>
+    <p id="tileTooltipDescription"></p>
+  </div>
 
   <div id="hud">
     <div class="hud-top brackets">
@@ -210,6 +223,8 @@
       <div id="nodeCards" class="brackets"></div>
       <div id="selectedPanel" class="hidden brackets">
         <h3 id="selName">NODE</h3>
+        <div id="selectedDescription" class="hidden"></div>
+        <div id="towerDetails">
         <div class="row"><span>DAMAGE</span><b id="selDmg">-</b></div>
         <div class="row"><span>RANGE</span><b id="selRange">-</b></div>
         <div class="row"><span>RATE</span><b id="selRate">-</b></div>
@@ -220,6 +235,7 @@
           <button id="upgradeFireRateBtn" class="upgrade-btn" data-stat="fireRate"><span>RATE +15%</span><b id="fireRateUpgradeCost">⬡ 45</b></button>
         </div>
         <button id="purgeBtn">PURGE NODE</button>
+        </div>
       </div>
     </div>
     <div id="hint"><span id="desktopHint">LEFT-DRAG: place walls · RIGHT-DRAG: remove walls · CLICK: select node or tile &nbsp;·&nbsp; SCROLL: zoom</span><span id="mobileHint">1-FINGER DRAG: PLACE/CLEAR WALLS · 2-FINGER DRAG: PAN · PINCH: ZOOM</span></div>
@@ -261,7 +277,7 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
   --------------------------------------------------------------------- */
   let gold = 150, lives = 20, wave = 0, waveInProgress = false, gameOver = false, awaitingReward = false;
   let selectedTowerType = null, selectedTileType = null;
-  let selectedTower = null;
+  let selectedTower = null, selectedTile = null;
   let spawnQueue = [], spawnTimer = 0;
   let towers = [], enemies = [], projectiles = [], effects = [], pulses = [];
   const rewardPool = createRewardPool(TOWER_TYPES, SPECIAL_TILE_TYPES);
@@ -957,6 +973,11 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
   const waveBtn = document.getElementById('waveBtn');
   const nodeCardsEl = document.getElementById('nodeCards');
   const selectedPanel = document.getElementById('selectedPanel');
+  const selectedDescription = document.getElementById('selectedDescription');
+  const towerDetails = document.getElementById('towerDetails');
+  const tileTooltip = document.getElementById('tileTooltip');
+  const tileTooltipName = document.getElementById('tileTooltipName');
+  const tileTooltipDescription = document.getElementById('tileTooltipDescription');
   const messageEl = document.getElementById('message');
   const rewardOverlay = document.getElementById('rewardOverlay');
   const rewardCardsEl = document.getElementById('rewardCards');
@@ -1118,8 +1139,24 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
     refreshSelectedTowerUI();
     selectedPanel.classList.remove('hidden');
   }
+  function selectTile(tile){
+    deselectTower();
+    selectedTile = tile;
+    selectedTowerType = null;
+    selectedTileType = null;
+    clearPreview();
+    refreshNodeCards();
+    selectedDescription.textContent = SPECIAL_TILE_TYPES[tile.key].desc;
+    selectedDescription.classList.remove('hidden');
+    towerDetails.classList.add('hidden');
+    selName.textContent = SPECIAL_TILE_TYPES[tile.key].name.toUpperCase();
+    selectedPanel.classList.remove('hidden');
+  }
   function refreshSelectedTowerUI(){
     if(!selectedTower) return;
+    selectedTile = null;
+    selectedDescription.classList.add('hidden');
+    towerDetails.classList.remove('hidden');
     selName.textContent = selectedTower.cfg.name.toUpperCase();
     selDmg.textContent = selectedTower.damage.toFixed(1).replace('.0', '');
     selRange.textContent = selectedTower.range.toFixed(1);
@@ -1135,6 +1172,7 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
   function deselectTower(){
     if(selectedTower && selectedTower.rangeRing){ scene.remove(selectedTower.rangeRing); selectedTower.rangeRing=null; }
     selectedTower = null;
+    selectedTile = null;
     selectedPanel.classList.add('hidden');
   }
   Object.keys(UPGRADE_STATS).forEach((stat)=>{
@@ -1199,6 +1237,41 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
     raycaster.setFromCamera(mouseNDC, camera);
     const cellHits = raycaster.intersectObjects(cellMeshList);
     return cellHits.length ? cellHits[0].object.userData : null;
+  }
+
+  function getTileAtPointer(e){
+    setMouseFromEvent(e);
+    raycaster.setFromCamera(mouseNDC, camera);
+    const tileHits = raycaster.intersectObjects(tileGroup.children, true);
+    if(!tileHits.length) return null;
+    let object = tileHits[0].object;
+    while(object && !object.userData.tileRef) object = object.parent;
+    return object?.userData.tileRef || null;
+  }
+
+  function hideTileTooltip(){
+    tileTooltip.classList.add('hidden');
+  }
+
+  function updateTileTooltip(e){
+    const tile = getTileAtPointer(e);
+    if(!tile){
+      hideTileTooltip();
+      return;
+    }
+    const definition = SPECIAL_TILE_TYPES[tile.key];
+    if(!definition){
+      hideTileTooltip();
+      return;
+    }
+    tileTooltipName.textContent = definition.name.toUpperCase();
+    tileTooltipDescription.textContent = definition.desc;
+    tileTooltip.classList.remove('hidden');
+    const appRect = document.getElementById('app').getBoundingClientRect();
+    const left = Math.min(e.clientX - appRect.left + 14, appRect.width - tileTooltip.offsetWidth - 12);
+    const top = Math.min(e.clientY - appRect.top + 14, appRect.height - tileTooltip.offsetHeight - 12);
+    tileTooltip.style.left = `${Math.max(12, left)}px`;
+    tileTooltip.style.top = `${Math.max(12, top)}px`;
   }
 
   function editWallCell(gx, gy, action){
@@ -1266,6 +1339,14 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
     }
     if(selectedTowerType || selectedTileType){
       placeSelectedAtPointer(e);
+      return;
+    }
+    const tile = getTileAtPointer(e);
+    if(tile){
+      selectTile(tile);
+      wallEditAction = wallAction;
+      lastEditedCellKey = null;
+      if(!shouldDeferWallEdit) editWallCell(tile.gx, tile.gy, wallEditAction);
       return;
     }
 
@@ -1423,14 +1504,17 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
       return;
     }
     if(mousePanPoint){
+      hideTileTooltip();
       updateMousePan(e);
       return;
     }
     if(wallEditAction){
+      hideTileTooltip();
       const cell = getCellAtPointer(e);
       if(cell) editWallCell(cell.gx, cell.gy, wallEditAction);
       return;
     }
+    updateTileTooltip(e);
     if(!selectedTowerType && !selectedTileType) return;
     setMouseFromEvent(e);
     raycaster.setFromCamera(mouseNDC, camera);
@@ -1460,6 +1544,7 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
       }
     }
   });
+  canvas.addEventListener('pointerleave', hideTileTooltip);
   window.addEventListener('pointerup', (e)=>{
     if(e.pointerType === 'touch'){
       handleTouchPointerEnd(e);

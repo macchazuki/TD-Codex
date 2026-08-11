@@ -169,6 +169,25 @@ test('starts with one deterministic tile of each type', async ({page}) => {
   await expect(page.locator('#nodeCards .tile-card')).toHaveCount(0);
 });
 
+test('shows effect tile details while hovering and after selecting', async ({page}) => {
+  await page.goto('./');
+  const tile = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(2, 1));
+
+  await page.mouse.move(tile.x, tile.y);
+  await expect(page.locator('#tileTooltip')).toBeVisible();
+  await expect(page.locator('#tileTooltipName')).toHaveText('DRAG FIELD');
+  await expect(page.locator('#tileTooltipDescription')).toHaveText('Slows enemies by 25% while they occupy this cell.');
+
+  await page.mouse.move(0, 0);
+  await expect(page.locator('#tileTooltip')).toBeHidden();
+
+  await page.mouse.click(tile.x, tile.y);
+  await expect(page.locator('#selectedPanel')).toBeVisible();
+  await expect(page.locator('#selName')).toHaveText('DRAG FIELD');
+  await expect(page.locator('#selectedDescription')).toHaveText('Slows enemies by 25% while they occupy this cell.');
+  await expect(page.locator('#towerDetails')).toBeHidden();
+});
+
 test('applies the initial damage-over-time tile to enemies on the route', async ({page}) => {
   await page.goto('./');
   await page.locator('#waveBtn').click();
