@@ -48,10 +48,20 @@ test('starts with one deterministic tile of each type', async ({page}) => {
   await page.goto('./');
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().tiles)).toEqual([
     {type: 'tile', key: 'slow', gx: 2, gy: 1},
-    {type: 'tile', key: 'dot', gx: 5, gy: 5},
+    {type: 'tile', key: 'dot', gx: 0, gy: 1},
     {type: 'tile', key: 'buff', gx: 3, gy: 3}
   ]);
   await expect(page.locator('#nodeCards .tile-card')).toHaveCount(0);
+});
+
+test('applies the initial damage-over-time tile to enemies on the route', async ({page}) => {
+  await page.goto('./');
+  await page.locator('#waveBtn').click();
+
+  await expect.poll(
+    () => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().enemyEffects),
+    {timeout: 10000}
+  ).toContainEqual(expect.objectContaining({activeTile: 'dot', dotDamage: 3}));
 });
 
 test('places a rewarded tile and restores the initial layout on reset', async ({page}) => {
@@ -65,7 +75,7 @@ test('places a rewarded tile and restores the initial layout on reset', async ({
   await page.evaluate(() => window.__CORE_DEFENSE__.resetGameForTest());
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().tiles)).toEqual([
     {type: 'tile', key: 'slow', gx: 2, gy: 1},
-    {type: 'tile', key: 'dot', gx: 5, gy: 5},
+    {type: 'tile', key: 'dot', gx: 0, gy: 1},
     {type: 'tile', key: 'buff', gx: 3, gy: 3}
   ]);
   await expect(page.locator('#nodeCards .tile-card')).toHaveCount(0);

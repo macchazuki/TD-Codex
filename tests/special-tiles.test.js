@@ -13,7 +13,7 @@ describe('special tiles', () => {
   it('defines the deterministic starting layout and effects', () => {
     expect(INITIAL_TILES).toEqual([
       {type: 'tile', key: 'slow', gx: 2, gy: 1},
-      {type: 'tile', key: 'dot', gx: 5, gy: 5},
+      {type: 'tile', key: 'dot', gx: 0, gy: 1},
       {type: 'tile', key: 'buff', gx: 3, gy: 3}
     ]);
     expect(SPECIAL_TILE_TYPES.slow.speedMultiplier).toBe(0.75);
