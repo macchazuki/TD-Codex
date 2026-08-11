@@ -77,7 +77,7 @@
     margin:0 14px 14px 14px;
   }
 
-  #nodeCards{display:flex; align-items:flex-start; align-content:flex-start; gap:10px; flex-wrap:wrap;}
+  #nodeCards{display:flex; align-items:flex-start; align-content:flex-start; gap:10px; flex-wrap:wrap; max-width:min(700px, 70vw);}
   .node-card{
     width:150px;
     flex:0 0 auto;
@@ -90,6 +90,8 @@
   .node-icon{width:22px; height:22px; margin-bottom:8px;}
   .node-name{font-family:'Orbitron',sans-serif; font-size:12px; font-weight:700; letter-spacing:0.5px; margin-bottom:4px;}
   .node-desc{font-size:10px; color:var(--text-dim); margin-top:6px; line-height:1.4;}
+  .node-card.tile-card{border-color:rgba(56,255,138,0.35);}
+  .node-card.tile-card.active{border-color:#38ff8a; box-shadow:0 0 14px rgba(56,255,138,0.28); background:rgba(56,255,138,0.06);}
 
   #selectedPanel{
     width:210px;
@@ -203,13 +205,13 @@
         <button id="purgeBtn">PURGE NODE</button>
       </div>
     </div>
-    <div id="hint">LEFT-DRAG: place walls · RIGHT-DRAG: remove walls · CLICK: select node &nbsp;·&nbsp; SCROLL: zoom</div>
+    <div id="hint">LEFT-DRAG: place walls · RIGHT-DRAG: remove walls · CLICK: select node or tile &nbsp;·&nbsp; SCROLL: zoom</div>
   </div>
 
   <div id="rewardOverlay" class="hidden" aria-labelledby="rewardTitle">
     <div id="rewardBox" class="brackets">
       <div id="rewardTitle">WAVE REWARD</div>
-      <div id="rewardSubtitle">SELECT ONE NODE TO ADD TO YOUR INVENTORY</div>
+      <div id="rewardSubtitle">SELECT ONE NODE OR TILE TO ADD TO YOUR INVENTORY</div>
       <div id="rewardCards"></div>
     </div>
   </div>
@@ -227,7 +229,8 @@
 import * as THREE from 'three';
 import { CELL, ENEMY_TYPES, GRID_H, GRID_W, MAX_WAVE, TOWER_TYPES } from './src/game/config.js';
 import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enemyHealth, findPath, generateWave } from './src/game/rules.js';
-import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInventory } from './src/game/rewards.js';
+import { addRewardToInventory, createRewardPool, drawRewards, removeFromInventory } from './src/game/rewards.js';
+import { INITIAL_TILES, SPECIAL_TILE_TYPES, applyDotTick, canPlaceTile, getEffectiveTowerStats, getEnemyTileEffect, getTileAt } from './src/game/specialTiles.js';
 
 (function(){
   "use strict";
@@ -239,12 +242,13 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
      STATE
   --------------------------------------------------------------------- */
   let gold = 150, lives = 20, wave = 0, waveInProgress = false, gameOver = false, awaitingReward = false;
-  let selectedTowerType = null;
+  let selectedTowerType = null, selectedTileType = null;
   let selectedTower = null;
   let spawnQueue = [], spawnTimer = 0;
   let towers = [], enemies = [], projectiles = [], effects = [], pulses = [];
-  const rewardPool = createTowerRewardPool(TOWER_TYPES);
-  let inventory = rewardPool.map((reward) => ({...reward}));
+  const rewardPool = createRewardPool(TOWER_TYPES, SPECIAL_TILE_TYPES);
+  let inventory = rewardPool.filter((reward) => reward.type === 'tower').map((reward) => ({...reward}));
+  let tiles = INITIAL_TILES.map((tile) => ({...tile}));
   let currentRewards = [];
   let occupiedSet = new Set(), wallSet = new Set(), pathSet = new Set(), pathSetRoute = [];
   let routeVersion = 0;
@@ -409,9 +413,12 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
   scene.add(groundGroup);
   const wallGroup = new THREE.Group();
   scene.add(wallGroup);
+  const tileGroup = new THREE.Group();
+  scene.add(tileGroup);
   const cellMeshList = [];
   const cellMeshMap = {};
   const wallMeshMap = {};
+  const tileMeshMap = {};
 
   const buildableMat = new THREE.MeshStandardMaterial({color:0x172743, emissive:0x07101e, emissiveIntensity:0.7, roughness:0.85, metalness:0.1});
   const buildableHoverOkMat = new THREE.MeshStandardMaterial({color:0x123322, emissive:0x0d5c2f, emissiveIntensity:0.6, roughness:0.7});
@@ -479,6 +486,38 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
     wallSet.delete(key);
     refreshRoute();
   }
+
+  function buildTileMesh(tile){
+    const cfg = SPECIAL_TILE_TYPES[tile.key];
+    const group = new THREE.Group();
+    const material = new THREE.MeshStandardMaterial({color: cfg.color, emissive: cfg.color, emissiveIntensity: 1.2, transparent: true, opacity: 0.82, roughness: 0.45, metalness: 0.25});
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.68, 0.08, 6), material);
+    base.position.y = 0.27;
+    const marker = new THREE.Mesh(new THREE.RingGeometry(0.36, 0.43, 6), material.clone());
+    marker.rotation.x = -Math.PI / 2;
+    marker.position.y = 0.34;
+    group.add(base, marker);
+    const p = gridToWorld(tile.gx, tile.gy);
+    group.position.set(p.x, 0, p.z);
+    group.userData.tileRef = tile;
+    return group;
+  }
+
+  function renderTile(tile){
+    const key = cellKey(tile.gx, tile.gy);
+    if(tileMeshMap[key]) tileGroup.remove(tileMeshMap[key]);
+    const mesh = buildTileMesh(tile);
+    tileGroup.add(mesh);
+    tileMeshMap[key] = mesh;
+  }
+
+  function renderAllTiles(){
+    Object.values(tileMeshMap).forEach((mesh) => tileGroup.remove(mesh));
+    Object.keys(tileMeshMap).forEach((key) => delete tileMeshMap[key]);
+    tiles.forEach(renderTile);
+  }
+
+  renderAllTiles();
 
   /* ---------------------------------------------------------------------
      PATH GLOW STRIP + PULSES + DECOR
@@ -599,6 +638,7 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
 
     const tower = {
       key: typeKey, cfg, group, gx, gy,
+      baseDamage: cfg.damage, baseFireRate: cfg.fireRate,
       damage: cfg.damage, range: cfg.range, fireRate: cfg.fireRate, splash: cfg.splash,
       cooldown: 0, target: null, kills: 0,
       rangeRing: null
@@ -629,6 +669,14 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
     scene.add(previewMesh);
     previewRing = makeRangeRing(cfg.range, cfg.color);
     scene.add(previewRing);
+  }
+  function ensureTilePreview(typeKey){
+    if(previewMesh) return;
+    previewMesh = buildTileMesh({type: 'tile', key: typeKey, gx: 0, gy: 0});
+    previewMesh.traverse((object) => {
+      if(object.material){ object.material = object.material.clone(); object.material.transparent = true; object.material.opacity = 0.55; }
+    });
+    scene.add(previewMesh);
   }
   function clearPreview(){
     if(previewMesh){ scene.remove(previewMesh); previewMesh = null; }
@@ -676,6 +724,7 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
       typeKey, type, mesh, barGroup, fg,
       hp: enemyHealth(typeKey, waveNum), maxHp: enemyHealth(typeKey, waveNum),
       speed: type.speed, traveled: 0, alive: true, phase: Math.random()*10,
+      dotTimer: 0, activeTile: null, activeTileEffect: {speedMultiplier: 1, dotDamage: 0},
       goldValue: type.gold, lifeDamage: type.dmg,
       route: worldWaypoints.map(point => point.clone()),
       routeLengths: segLengths.slice(), routeTotalLength: pathTotalLength, routeVersion
@@ -766,7 +815,15 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
   function updateEnemies(dt, t){
     for(const enemy of enemies){
       if(!enemy.alive) continue;
-      enemy.traveled += enemy.speed*dt;
+      const cell = getGridCellFromWorld(enemy.mesh.position);
+      const tile = getTileAt(tiles, cell.gx, cell.gy);
+      const tileEffect = getEnemyTileEffect(tile);
+      enemy.activeTile = tile?.key || null;
+      enemy.activeTileEffect = tileEffect;
+      enemy.traveled += enemy.speed * tileEffect.speedMultiplier * dt;
+      const dotTick = applyDotTick({timer: enemy.dotTimer, dt, damage: tileEffect.dotDamage, interval: tileEffect.dotInterval});
+      enemy.dotTimer = tileEffect.dotDamage ? dotTick.timer : 0;
+      if(dotTick.damage) damageEnemy(enemy, dotTick.damage, null);
       if(enemy.traveled >= enemy.routeTotalLength){
         lives -= enemy.lifeDamage;
         updateLivesUI();
@@ -797,6 +854,7 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
 
   function updateTowers(dt){
     for(const tower of towers){
+      refreshTowerStats(tower);
       tower.cooldown -= dt;
       if(!tower.target || !tower.target.alive || distXZ(tower.group.position, tower.target.mesh.position) > tower.range){
         tower.target = null;
@@ -895,31 +953,39 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
     const hex = '#' + color.toString(16).padStart(6,'0');
     if(shape==='diamond') return `<div style="width:100%;height:100%;background:${hex};transform:rotate(45deg) scale(0.7);box-shadow:0 0 8px ${hex};"></div>`;
     if(shape==='circle') return `<div style="width:100%;height:100%;border-radius:50%;background:${hex};box-shadow:0 0 8px ${hex};"></div>`;
+    if(shape==='hex') return `<div style="width:100%;height:100%;background:${hex};clip-path:polygon(25% 3%,75% 3%,100% 50%,75% 97%,25% 97%,0 50%);filter:drop-shadow(0 0 6px ${hex});"></div>`;
+    if(shape==='cross') return `<div style="width:100%;height:100%;position:relative;filter:drop-shadow(0 0 6px ${hex});"><i style="position:absolute;left:42%;top:0;width:16%;height:100%;background:${hex};"></i><i style="position:absolute;left:0;top:42%;width:100%;height:16%;background:${hex};"></i></div>`;
+    if(shape==='star') return `<div style="width:100%;height:100%;background:${hex};clip-path:polygon(50% 0,61% 36%,100% 36%,69% 58%,81% 100%,50% 74%,19% 100%,31% 58%,0 36%,39% 36%);filter:drop-shadow(0 0 6px ${hex});"></div>`;
     return `<div style="width:0;height:0;border-left:11px solid transparent;border-right:11px solid transparent;border-bottom:19px solid ${hex};filter:drop-shadow(0 0 6px ${hex});"></div>`;
   }
 
   function buildNodeCards(){
     nodeCardsEl.innerHTML = '';
     inventory.forEach((item)=>{
-      const cfg = TOWER_TYPES[item.key];
+      const cfg = item.type === 'tile' ? SPECIAL_TILE_TYPES[item.key] : TOWER_TYPES[item.key];
       if(!cfg) return;
       const card = document.createElement('div');
-      card.className = 'node-card';
+      card.className = `node-card${item.type === 'tile' ? ' tile-card' : ''}`;
       card.dataset.key = cfg.key;
+      card.dataset.type = item.type;
       card.setAttribute('aria-label', `${cfg.name}, inventory item`);
-      card.classList.toggle('active', selectedTowerType === cfg.key);
+      card.classList.toggle('active', item.type === 'tile' ? selectedTileType === cfg.key : selectedTowerType === cfg.key);
       card.innerHTML = `
         <div class="node-icon">${iconShape(cfg.shape, cfg.color)}</div>
         <div class="node-name">${cfg.name}</div>
         <div class="node-desc">${cfg.desc}</div>
       `;
       card.addEventListener('click', ()=>{
-        if(gameOver || !inventory.some((inventoryItem) => inventoryItem.type === 'tower' && inventoryItem.key === cfg.key)) return;
-        if(selectedTowerType === cfg.key){
+        if(gameOver || !inventory.some((inventoryItem) => inventoryItem.type === item.type && inventoryItem.key === cfg.key)) return;
+        const isTile = item.type === 'tile';
+        const isSelected = isTile ? selectedTileType === cfg.key : selectedTowerType === cfg.key;
+        if(isSelected){
           selectedTowerType = null;
+          selectedTileType = null;
           clearPreview();
         } else {
-          selectedTowerType = cfg.key;
+          selectedTowerType = isTile ? null : cfg.key;
+          selectedTileType = isTile ? cfg.key : null;
           deselectTower();
           clearPreview();
         }
@@ -927,6 +993,21 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
       });
       nodeCardsEl.appendChild(card);
     });
+  }
+
+  function refreshTowerStats(tower){
+    const tile = getTileAt(tiles, tower.gx, tower.gy);
+    const stats = getEffectiveTowerStats({damage: tower.baseDamage, fireRate: tower.baseFireRate}, tile);
+    tower.damage = stats.damage;
+    tower.fireRate = stats.fireRate;
+    tower.activeTile = tile?.key || null;
+  }
+
+  function placeTile(gx, gy, typeKey){
+    const tile = {type: 'tile', key: typeKey, gx, gy};
+    tiles.push(tile);
+    renderTile(tile);
+    setCellVisual(gx, gy);
   }
   function refreshNodeCards(){
     buildNodeCards();
@@ -948,11 +1029,12 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
       card.type = 'button';
       card.className = 'reward-card brackets';
       card.dataset.key = reward.key;
+      card.dataset.type = reward.type;
       card.innerHTML = `
         <div class="node-icon">${iconShape(reward.shape, reward.color)}</div>
         <div class="node-name">${reward.name}</div>
         <div class="node-desc">${reward.description}</div>
-        <div class="reward-stats"><span>DMG ${reward.damage}</span><span>RNG ${reward.range}</span></div>
+        <div class="reward-stats"><span>${reward.type === 'tile' ? 'UTILITY TILE' : `DMG ${reward.damage}`}</span><span>${reward.type === 'tile' ? 'CONSUMABLE' : `RNG ${reward.range}`}</span></div>
       `;
       card.addEventListener('click', ()=> selectReward(reward));
       rewardCardsEl.appendChild(card);
@@ -992,6 +1074,7 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
     deselectTower();
     selectedTower = tower;
     selectedTowerType = null;
+    selectedTileType = null;
     clearPreview();
     refreshNodeCards();
     const ring = makeRangeRing(tower.range, tower.cfg.color);
@@ -1084,7 +1167,7 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
       if(obj && obj.userData.towerRef){ selectTower(obj.userData.towerRef); return; }
     }
 
-    if(selectedTowerType){
+    if(selectedTowerType || selectedTileType){
       const cellHits = raycaster.intersectObjects(cellMeshList);
       if(cellHits.length){
         const {gx, gy} = cellHits[0].object.userData;
@@ -1094,16 +1177,22 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
           selectTower(towerOnCell);
           return;
         }
-        const cfg = TOWER_TYPES[selectedTowerType];
-        const placement = canPlaceTower({gx, gy, isWall: wallSet.has(key), occupied: occupiedSet, inventory, typeKey: selectedTowerType});
+        const isTile = Boolean(selectedTileType);
+        const typeKey = isTile ? selectedTileType : selectedTowerType;
+        const cfg = isTile ? SPECIAL_TILE_TYPES[typeKey] : TOWER_TYPES[typeKey];
+        const placement = isTile
+          ? canPlaceTile({gx, gy, gridW: GRID_W, gridH: GRID_H, occupied: occupiedSet, tiles, inventory, typeKey})
+          : canPlaceTower({gx, gy, isWall: wallSet.has(key), occupied: occupiedSet, inventory, typeKey});
         if(!placement.ok){
-          const messages = {wall:'DEPLOY A WALL FIRST', occupied:'NODE SLOT OCCUPIED', unavailable:'NO NODE IN INVENTORY'};
+          const messages = {wall:'DEPLOY A WALL FIRST', occupied:'NODE SLOT OCCUPIED', 'tower-on-cell':'NODE SLOT OCCUPIED', unavailable:'NO ITEM IN INVENTORY', 'tile-exists':'CELL ALREADY HAS A TILE'};
           showMessage(messages[placement.reason] || 'INVALID NODE DEPLOYMENT');
           return;
         }
-        placeTower(gx, gy, selectedTowerType);
-        removeFromInventory(inventory, 'tower', selectedTowerType);
+        if(isTile) placeTile(gx, gy, typeKey);
+        else placeTower(gx, gy, typeKey);
+        removeFromInventory(inventory, isTile ? 'tile' : 'tower', typeKey);
         selectedTowerType = null;
+        selectedTileType = null;
         clearPreview();
         refreshNodeCards();
         return;
@@ -1133,7 +1222,7 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
       if(cell) editWallCell(cell.gx, cell.gy, wallEditAction);
       return;
     }
-    if(!selectedTowerType) return;
+    if(!selectedTowerType && !selectedTileType) return;
     setMouseFromEvent(e);
     raycaster.setFromCamera(mouseNDC, camera);
     const cellHits = raycaster.intersectObjects(cellMeshList);
@@ -1146,14 +1235,19 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
       const key = gx+','+gy;
       if(key !== hoveredCellKey){
         hoveredCellKey = key;
-        const cfg = TOWER_TYPES[selectedTowerType];
-        const valid = wallSet.has(key) && !occupiedSet.has(key);
+        const isTile = Boolean(selectedTileType);
+        const typeKey = isTile ? selectedTileType : selectedTowerType;
+        const cfg = isTile ? SPECIAL_TILE_TYPES[typeKey] : TOWER_TYPES[typeKey];
+        const valid = isTile
+          ? canPlaceTile({gx, gy, gridW: GRID_W, gridH: GRID_H, occupied: occupiedSet, tiles, inventory, typeKey}).ok
+          : wallSet.has(key) && !occupiedSet.has(key);
         const p = gridToWorld(gx,gy);
-        ensurePreview(cfg);
-        previewMesh.position.set(p.x,WALL_TOP,p.z);
-        previewRing.position.set(p.x,WALL_TOP + 0.02,p.z);
+        if(isTile) ensureTilePreview(typeKey);
+        else ensurePreview(cfg);
+        previewMesh.position.set(p.x, isTile ? 0 : WALL_TOP, p.z);
+        if(previewRing) previewRing.position.set(p.x,WALL_TOP + 0.02,p.z);
         previewMesh.traverse(o=>{ if(o.material) o.material.opacity = valid?0.6:0.25; });
-        previewRing.material.color.set(valid ? cfg.color : 0xff3b5c);
+        if(previewRing) previewRing.material.color.set(valid ? cfg.color : 0xff3b5c);
       }
     }
   });
@@ -1170,6 +1264,7 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
   window.addEventListener('keydown', (e)=>{
     if(e.key === 'Escape'){
       selectedTowerType = null;
+      selectedTileType = null;
       clearPreview();
       deselectTower();
       refreshNodeCards();
@@ -1211,11 +1306,13 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
     wallSet.clear();
     Object.keys(wallMeshMap).forEach(key => delete wallMeshMap[key]);
     refreshRoute();
+    tiles = INITIAL_TILES.map((tile) => ({...tile}));
+    renderAllTiles();
     gold = 150; lives = 20; wave = 0; waveInProgress = false; gameOver = false; awaitingReward = false;
     spawnQueue = []; spawnTimer = 0;
-    inventory = rewardPool.map((reward) => ({...reward}));
+    inventory = rewardPool.filter((reward) => reward.type === 'tower').map((reward) => ({...reward}));
     currentRewards = [];
-    selectedTowerType = null; clearPreview(); deselectTower();
+    selectedTowerType = null; selectedTileType = null; clearPreview(); deselectTower();
     updateGoldUI(); updateLivesUI(); updateWaveUI(); refreshWaveButton(); refreshNodeCards();
     rewardCardsEl.innerHTML = '';
     rewardOverlay.classList.add('hidden');
@@ -1238,14 +1335,28 @@ import { addRewardToInventory, createTowerRewardPool, drawRewards, removeFromInv
         enemyPositions: enemies.map(enemy => [enemy.mesh.position.x, enemy.mesh.position.z]),
         enemyRouteStarts: enemies.map(enemy => [enemy.route[0].x, enemy.route[0].z]),
         towers: towers.length,
+        tiles: tiles.map((tile) => ({...tile})),
+        tileInventory: inventory.filter((item) => item.type === 'tile').map((item) => item.key),
+        enemyEffects: enemies.map((enemy) => ({activeTile: enemy.activeTile, speedMultiplier: enemy.activeTileEffect.speedMultiplier, dotDamage: enemy.activeTileEffect.dotDamage, dotTimer: enemy.dotTimer})),
+        towerStats: towers.map((tower) => ({key: tower.key, gx: tower.gx, gy: tower.gy, damage: tower.damage, fireRate: tower.fireRate, activeTile: tower.activeTile})),
         previewVisible: Boolean(previewMesh),
         enemies: enemies.length,
-        inventory: inventory.map((item) => item.key), awaitingReward,
+        inventory: inventory.map((item) => item.key),
+        inventoryItems: inventory.map((item) => ({type: item.type, key: item.key})),
+        awaitingReward,
         rewardChoices: currentRewards.map((reward) => reward.key)
       };
     },
     showWaveRewardForTest(){
       presentWaveReward();
+    },
+    grantRewardForTest(type, key){
+      const reward = rewardPool.find((item) => item.type === type && item.key === key);
+      if(reward) addRewardToInventory(inventory, reward);
+      refreshNodeCards();
+    },
+    resetGameForTest(){
+      resetGame();
     },
     projectCell(gx, gy){
       const p = gridToWorld(gx, gy).setY(0);
