@@ -1,5 +1,17 @@
 import { expect, test } from '@playwright/test';
 
+async function dispatchTouchPointer(page, type, pointerId, point) {
+  await page.locator('#gameCanvas').dispatchEvent(type, {
+    pointerId,
+    pointerType: 'touch',
+    isPrimary: pointerId === 1,
+    button: 0,
+    buttons: type === 'pointerup' || type === 'pointercancel' ? 0 : 1,
+    clientX: point.x,
+    clientY: point.y
+  });
+}
+
 test('loads the game and exposes the initial HUD', async ({page}) => {
   await page.goto('./');
   await expect(page.locator('.brand')).toHaveText('CORE://DEFENSE');
@@ -42,6 +54,95 @@ test('builds walls, places towers on them, and removes towers safely', async ({p
   await page.mouse.move(secondCell.x, secondCell.y, {steps: 4});
   await page.mouse.up({button: 'right'});
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().walls)).toBe(0);
+});
+
+test.describe('mobile canvas controls', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test('one-finger drags place or clear walls based on the starting cell', async ({page}) => {
+    await page.goto('./');
+    const first = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
+    const second = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 2));
+
+    await dispatchTouchPointer(page, 'pointerdown', 1, first);
+    await dispatchTouchPointer(page, 'pointermove', 1, second);
+    await dispatchTouchPointer(page, 'pointerup', 1, second);
+    await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().walls)).toBe(2);
+
+    await dispatchTouchPointer(page, 'pointerdown', 1, first);
+    await dispatchTouchPointer(page, 'pointermove', 1, second);
+    await dispatchTouchPointer(page, 'pointerup', 1, second);
+    await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().walls)).toBe(0);
+  });
+
+  test('a touch tap still places the selected tower', async ({page}) => {
+    await page.goto('./');
+    const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
+    await page.mouse.click(cell.x, cell.y);
+    await page.locator('#nodeCards .node-card').first().click();
+
+    await dispatchTouchPointer(page, 'pointerdown', 1, cell);
+    await dispatchTouchPointer(page, 'pointerup', 1, cell);
+    await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState())).toMatchObject({towers: 1, walls: 1});
+  });
+
+  test('two-finger pan moves the camera without editing cells', async ({page}) => {
+    await page.goto('./');
+    const first = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(3, 1));
+    const second = {x: first.x + 80, y: first.y + 20};
+    const before = await page.evaluate(() => window.__CORE_DEFENSE__.getSceneState());
+
+    await dispatchTouchPointer(page, 'pointerdown', 1, first);
+    await dispatchTouchPointer(page, 'pointerdown', 2, second);
+    await dispatchTouchPointer(page, 'pointermove', 1, {x: first.x + 40, y: first.y + 20});
+    await dispatchTouchPointer(page, 'pointermove', 2, {x: second.x + 40, y: second.y + 20});
+    await dispatchTouchPointer(page, 'pointerup', 1, first);
+    await dispatchTouchPointer(page, 'pointerup', 2, second);
+
+    await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().cameraTarget)).not.toEqual(before.cameraTarget);
+    await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().walls)).toBe(before.walls);
+  });
+
+  test('pinch zoom changes camera distance within its bounds', async ({page}) => {
+    await page.goto('./');
+    const center = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(4, 4));
+    const left = {x: center.x - 40, y: center.y};
+    const right = {x: center.x + 40, y: center.y};
+
+    await dispatchTouchPointer(page, 'pointerdown', 1, left);
+    await dispatchTouchPointer(page, 'pointerdown', 2, right);
+    await dispatchTouchPointer(page, 'pointermove', 1, {x: center.x - 400, y: center.y});
+    await dispatchTouchPointer(page, 'pointermove', 2, {x: center.x + 400, y: center.y});
+    await dispatchTouchPointer(page, 'pointerup', 1, left);
+    await dispatchTouchPointer(page, 'pointerup', 2, right);
+
+    await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().cameraDistance)).toBe(10);
+  });
+
+  test('gesture cancellation and transitions clear wall editing', async ({page}) => {
+    await page.goto('./');
+    const first = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
+    const second = {x: first.x + 80, y: first.y + 20};
+
+    await dispatchTouchPointer(page, 'pointerdown', 1, first);
+    await dispatchTouchPointer(page, 'pointerdown', 2, second);
+    await dispatchTouchPointer(page, 'pointercancel', 1, first);
+    await dispatchTouchPointer(page, 'pointercancel', 2, second);
+    await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().wallEditAction)).toBeNull();
+  });
+
+  test('shows the mobile gesture hint', async ({page}) => {
+    await page.goto('./');
+    await expect(page.locator('#mobileHint')).toBeVisible();
+    await expect(page.locator('#mobileHint')).toHaveText('1-FINGER DRAG: PLACE/CLEAR WALLS · 2-FINGER DRAG: PAN · PINCH: ZOOM');
+    await expect(page.locator('#desktopHint')).toBeHidden();
+  });
+});
+
+test('shows the desktop control hint', async ({page}) => {
+  await page.goto('./');
+  await expect(page.locator('#desktopHint')).toBeVisible();
+  await expect(page.locator('#mobileHint')).toBeHidden();
 });
 
 test('starts with one deterministic tile of each type', async ({page}) => {
