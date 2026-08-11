@@ -29,6 +29,28 @@ export function createTowerRewardPool(towerTypes) {
   }));
 }
 
+/** Converts tile definitions into the generic reward shape. */
+export function createTileRewardPool(tileTypes) {
+  return Object.values(tileTypes).map((tile) => ({
+    type: 'tile',
+    key: tile.key,
+    name: tile.name,
+    description: tile.desc,
+    color: tile.color,
+    shape: tile.shape,
+    damage: tile.damage,
+    interval: tile.interval,
+    speedMultiplier: tile.speedMultiplier,
+    damageMultiplier: tile.damageMultiplier,
+    fireRateMultiplier: tile.fireRateMultiplier
+  }));
+}
+
+/** Creates the mixed tower and tile wave reward pool. */
+export function createRewardPool(towerTypes, tileTypes) {
+  return [...createTowerRewardPool(towerTypes), ...createTileRewardPool(tileTypes)];
+}
+
 /** Adds one separate copy of a selected reward to the inventory array. */
 export function addRewardToInventory(inventory, reward) {
   if (!reward || typeof reward.type !== 'string' || typeof reward.key !== 'string') {
