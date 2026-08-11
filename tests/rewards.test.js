@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { addRewardToInventory, drawRewards, removeFromInventory } from '../src/game/rewards.js';
+import { addRewardToInventory, createRewardPool, drawRewards, removeFromInventory } from '../src/game/rewards.js';
+import { SPECIAL_TILE_TYPES } from '../src/game/specialTiles.js';
 
 describe('rewards', () => {
   it('draws a distinct, deterministic selection from a reward pool', () => {
@@ -29,5 +30,14 @@ describe('rewards', () => {
     expect(removeFromInventory(inventory, 'tower', 'filter')).toBe(true);
     expect(removeFromInventory(inventory, 'tower', 'filter')).toBe(false);
     expect(inventory).toHaveLength(0);
+  });
+
+  it('supports tile rewards in the mixed pool and inventory', () => {
+    const pool = createRewardPool({filter: {key: 'filter', name: 'Filter', desc: 'Fast', color: 1, shape: 'diamond', damage: 8, range: 4, fireRate: 2, splash: 0}}, SPECIAL_TILE_TYPES);
+    expect(pool.some((item) => item.type === 'tower' && item.key === 'filter')).toBe(true);
+    expect(pool.some((item) => item.type === 'tile' && item.key === 'dot')).toBe(true);
+    const inventory = [];
+    addRewardToInventory(inventory, {type: 'tile', key: 'dot'});
+    expect(removeFromInventory(inventory, 'tile', 'dot')).toBe(true);
   });
 });

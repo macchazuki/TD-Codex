@@ -44,6 +44,33 @@ test('builds walls, places towers on them, and removes towers safely', async ({p
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().walls)).toBe(0);
 });
 
+test('starts with one deterministic tile of each type', async ({page}) => {
+  await page.goto('./');
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().tiles)).toEqual([
+    {type: 'tile', key: 'slow', gx: 2, gy: 1},
+    {type: 'tile', key: 'dot', gx: 5, gy: 5},
+    {type: 'tile', key: 'buff', gx: 3, gy: 3}
+  ]);
+  await expect(page.locator('#nodeCards .tile-card')).toHaveCount(0);
+});
+
+test('places a rewarded tile and restores the initial layout on reset', async ({page}) => {
+  await page.goto('./');
+  await page.evaluate(() => window.__CORE_DEFENSE__.grantRewardForTest('tile', 'dot'));
+  await page.locator('#nodeCards .tile-card[data-key="dot"]').last().click();
+  const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(8, 0));
+  await page.mouse.click(cell.x, cell.y);
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().tiles)).toHaveLength(4);
+  await expect(page.locator('#nodeCards .tile-card[data-key="dot"]')).toHaveCount(0);
+  await page.evaluate(() => window.__CORE_DEFENSE__.resetGameForTest());
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().tiles)).toEqual([
+    {type: 'tile', key: 'slow', gx: 2, gy: 1},
+    {type: 'tile', key: 'dot', gx: 5, gy: 5},
+    {type: 'tile', key: 'buff', gx: 3, gy: 3}
+  ]);
+  await expect(page.locator('#nodeCards .tile-card')).toHaveCount(0);
+});
+
 test('purchases escalating upgrades and preserves them through purge', async ({page}) => {
   await page.goto('./');
   const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
@@ -116,12 +143,14 @@ test('shows three reward choices and adds the selected tower to inventory', asyn
   await expect(page.locator('#rewardCards .reward-card')).toHaveCount(3);
 
   const rewardKey = await page.locator('#rewardCards .reward-card').first().getAttribute('data-key');
+  const rewardType = await page.locator('#rewardCards .reward-card').first().getAttribute('data-type');
+  const beforeCount = await page.evaluate(({key, type}) => window.__CORE_DEFENSE__.getSceneState().inventoryItems.filter((item) => item.key === key && item.type === type).length, {key: rewardKey, type: rewardType});
   await page.locator('#rewardCards .reward-card').first().click();
 
   await expect(page.locator('#rewardOverlay')).toBeHidden();
-  await expect.poll(() => page.evaluate((key) => window.__CORE_DEFENSE__.getSceneState().inventory.filter((itemKey) => itemKey === key).length, rewardKey)).toBe(2);
-  const rewardCards = page.locator(`#nodeCards .node-card[data-key="${rewardKey}"]`);
-  await expect(rewardCards).toHaveCount(2);
+  await expect.poll(() => page.evaluate(({key, type}) => window.__CORE_DEFENSE__.getSceneState().inventoryItems.filter((item) => item.key === key && item.type === type).length, {key: rewardKey, type: rewardType})).toBe(beforeCount + 1);
+  const rewardCards = page.locator(`#nodeCards .node-card[data-key="${rewardKey}"][data-type="${rewardType}"]`);
+  await expect(rewardCards).toHaveCount(beforeCount + 1);
   const cardPositions = await rewardCards.evaluateAll((cards) => cards.map((card) => {
     const bounds = card.getBoundingClientRect();
     return {left: bounds.left, top: bounds.top};
