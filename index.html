@@ -103,6 +103,15 @@
   #selectedPanel h3{font-family:'Orbitron',sans-serif; font-size:13px; letter-spacing:1px; margin-bottom:8px;}
   #selectedPanel .row{display:flex; justify-content:space-between; font-size:11px; color:var(--text-dim); margin-bottom:4px;}
   #selectedPanel .row b{color:var(--text); font-weight:400;}
+  .upgrade-actions{display:flex; flex-direction:column; gap:4px; margin-top:8px;}
+  .upgrade-btn{
+    display:flex; justify-content:space-between; align-items:center; width:100%; padding:6px 8px;
+    font-family:'Space Mono',monospace; font-size:10px; color:var(--cyan);
+    background:rgba(0,229,255,0.06); border:1px solid var(--panel-border); cursor:pointer;
+  }
+  .upgrade-btn b{color:var(--amber); font-weight:400;}
+  .upgrade-btn:hover:not(:disabled){border-color:var(--cyan); background:rgba(0,229,255,0.15);}
+  .upgrade-btn:disabled{opacity:0.35; cursor:not-allowed;}
   #purgeBtn{
     margin-top:8px; width:100%; padding:8px; font-family:'Orbitron',sans-serif; font-size:11px; letter-spacing:1px;
     background:rgba(255,59,92,0.08); border:1px solid var(--danger); color:var(--danger); cursor:pointer;
@@ -202,6 +211,11 @@
         <div class="row"><span>RANGE</span><b id="selRange">-</b></div>
         <div class="row"><span>RATE</span><b id="selRate">-</b></div>
         <div class="row"><span>KILLS</span><b id="selKills">-</b></div>
+        <div class="upgrade-actions" aria-label="Tower upgrades">
+          <button id="upgradeDamageBtn" class="upgrade-btn" data-stat="damage"><span>DAMAGE +20%</span><b id="damageUpgradeCost">⬡ 40</b></button>
+          <button id="upgradeRangeBtn" class="upgrade-btn" data-stat="range"><span>RANGE +10%</span><b id="rangeUpgradeCost">⬡ 35</b></button>
+          <button id="upgradeFireRateBtn" class="upgrade-btn" data-stat="fireRate"><span>RATE +15%</span><b id="fireRateUpgradeCost">⬡ 45</b></button>
+        </div>
         <button id="purgeBtn">PURGE NODE</button>
       </div>
     </div>
@@ -229,8 +243,9 @@
 import * as THREE from 'three';
 import { CELL, ENEMY_TYPES, GRID_H, GRID_W, MAX_WAVE, TOWER_TYPES } from './src/game/config.js';
 import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enemyHealth, findPath, generateWave } from './src/game/rules.js';
-import { addRewardToInventory, createRewardPool, drawRewards, removeFromInventory } from './src/game/rewards.js';
+import { addRewardToInventory, createRewardPool, drawRewards, removeFromInventory, removeInventoryItem } from './src/game/rewards.js';
 import { INITIAL_TILES, SPECIAL_TILE_TYPES, applyDotTick, canPlaceTile, getEffectiveTowerStats, getEnemyTileEffect, getTileAt } from './src/game/specialTiles.js';
+import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } from './src/game/upgrades.js';
 
 (function(){
   "use strict";
@@ -631,8 +646,10 @@ import { INITIAL_TILES, SPECIAL_TILE_TYPES, applyDotTick, canPlaceTile, getEffec
     return ring;
   }
 
-  function placeTower(gx, gy, typeKey){
+  function placeTower(gx, gy, typeKey, inventoryItem){
     const cfg = TOWER_TYPES[typeKey];
+    const upgrades = {...(inventoryItem?.upgrades || {})};
+    const stats = getTowerStats(cfg, upgrades);
     const group = buildTowerMesh(cfg);
     const p = gridToWorld(gx,gy);
     group.position.set(p.x, WALL_TOP, p.z);
@@ -640,8 +657,9 @@ import { INITIAL_TILES, SPECIAL_TILE_TYPES, applyDotTick, canPlaceTile, getEffec
 
     const tower = {
       key: typeKey, cfg, group, gx, gy,
-      baseDamage: cfg.damage, baseFireRate: cfg.fireRate,
-      damage: cfg.damage, range: cfg.range, fireRate: cfg.fireRate, splash: cfg.splash,
+      baseDamage: stats.damage, baseFireRate: stats.fireRate,
+      damage: stats.damage, range: stats.range, fireRate: stats.fireRate, splash: cfg.splash,
+      upgrades,
       cooldown: 0, target: null, kills: 0,
       rangeRing: null
     };
@@ -942,8 +960,15 @@ import { INITIAL_TILES, SPECIAL_TILE_TYPES, applyDotTick, canPlaceTile, getEffec
   const overlay = document.getElementById('overlay');
   const overlayTitle = document.getElementById('overlayTitle');
   const overlaySubtitle = document.getElementById('overlaySubtitle');
+  const upgradeButtons = Object.fromEntries(Object.keys(UPGRADE_STATS).map((stat) => [
+    stat,
+    {
+      button: document.querySelector(`[data-stat="${stat}"]`),
+      cost: document.getElementById(`${stat}UpgradeCost`)
+    }
+  ]));
 
-  function updateGoldUI(){ goldValEl.textContent = Math.floor(gold); refreshNodeCards(); }
+  function updateGoldUI(){ goldValEl.textContent = Math.floor(gold); refreshNodeCards(); refreshSelectedTowerUI(); }
   function updateLivesUI(){ livesValEl.textContent = Math.max(0,Math.floor(lives)); }
   function updateWaveUI(){ waveValEl.textContent = wave; }
   function refreshWaveButton(){
@@ -999,8 +1024,10 @@ import { INITIAL_TILES, SPECIAL_TILE_TYPES, applyDotTick, canPlaceTile, getEffec
 
   function refreshTowerStats(tower){
     const tile = getTileAt(tiles, tower.gx, tower.gy);
-    const stats = getEffectiveTowerStats({damage: tower.baseDamage, fireRate: tower.baseFireRate}, tile);
+    const upgradedStats = getTowerStats(tower.cfg, tower.upgrades);
+    const stats = getEffectiveTowerStats({damage: upgradedStats.damage, fireRate: upgradedStats.fireRate}, tile);
     tower.damage = stats.damage;
+    tower.range = upgradedStats.range;
     tower.fireRate = stats.fireRate;
     tower.activeTile = tile?.key || null;
   }
@@ -1085,21 +1112,55 @@ import { INITIAL_TILES, SPECIAL_TILE_TYPES, applyDotTick, canPlaceTile, getEffec
     ring.position.z = tower.group.position.z;
     scene.add(ring);
     tower.rangeRing = ring;
-    selName.textContent = tower.cfg.name.toUpperCase();
-    selDmg.textContent = tower.damage;
-    selRange.textContent = tower.range.toFixed(1);
-    selRate.textContent = tower.fireRate.toFixed(2)+'/s';
-    selKills.textContent = tower.kills;
+    refreshSelectedTowerUI();
     selectedPanel.classList.remove('hidden');
+  }
+  function refreshSelectedTowerUI(){
+    if(!selectedTower) return;
+    selName.textContent = selectedTower.cfg.name.toUpperCase();
+    selDmg.textContent = selectedTower.damage.toFixed(1).replace('.0', '');
+    selRange.textContent = selectedTower.range.toFixed(1);
+    selRate.textContent = selectedTower.fireRate.toFixed(2)+'/s';
+    selKills.textContent = selectedTower.kills;
+    Object.keys(UPGRADE_STATS).forEach((stat)=>{
+      const cost = getUpgradeCost(selectedTower, stat);
+      const controls = upgradeButtons[stat];
+      controls.cost.textContent = `⬡ ${cost}`;
+      controls.button.disabled = gameOver || gold < cost;
+    });
   }
   function deselectTower(){
     if(selectedTower && selectedTower.rangeRing){ scene.remove(selectedTower.rangeRing); selectedTower.rangeRing=null; }
     selectedTower = null;
     selectedPanel.classList.add('hidden');
   }
+  Object.keys(UPGRADE_STATS).forEach((stat)=>{
+    upgradeButtons[stat].button.addEventListener('click', ()=>{
+      if(!selectedTower) return;
+      const result = purchaseTowerUpgrade({tower: selectedTower, stat, gold});
+      if(!result.ok){
+        showMessage(result.reason === 'insufficient-gold' ? 'INSUFFICIENT GOLD' : 'INVALID UPGRADE');
+        return;
+      }
+      gold = result.gold;
+      selectedTower.upgrades = result.upgrades;
+      selectedTower.damage = result.stats.damage;
+      selectedTower.range = result.stats.range;
+      selectedTower.fireRate = result.stats.fireRate;
+      if(selectedTower.rangeRing){
+        scene.remove(selectedTower.rangeRing);
+        selectedTower.rangeRing = makeRangeRing(selectedTower.range, selectedTower.cfg.color);
+        selectedTower.rangeRing.position.set(selectedTower.group.position.x, WALL_TOP + 0.02, selectedTower.group.position.z);
+        scene.add(selectedTower.rangeRing);
+      }
+      updateGoldUI();
+      showMessage(`${UPGRADE_STATS[stat].label} UPGRADED`);
+    });
+  });
   purgeBtn.addEventListener('click', ()=>{
     if(!selectedTower) return;
-    addRewardToInventory(inventory, {type: 'tower', key: selectedTower.key});
+    const reward = rewardPool.find((item) => item.key === selectedTower.key);
+    addRewardToInventory(inventory, {...reward, upgrades: {...selectedTower.upgrades}});
     removeTower(selectedTower);
     deselectTower();
     refreshNodeCards();
@@ -1191,8 +1252,12 @@ import { INITIAL_TILES, SPECIAL_TILE_TYPES, applyDotTick, canPlaceTile, getEffec
           return;
         }
         if(isTile) placeTile(gx, gy, typeKey);
-        else placeTower(gx, gy, typeKey);
-        removeFromInventory(inventory, isTile ? 'tile' : 'tower', typeKey);
+        else {
+          const inventoryItem = inventory.find((item) => item.type === 'tower' && item.key === selectedTowerType);
+          placeTower(gx, gy, selectedTowerType, inventoryItem);
+        }
+        if(isTile) removeFromInventory(inventory, 'tile', typeKey);
+        else removeInventoryItem(inventory, inventory.find((item) => item.type === 'tower' && item.key === typeKey));
         selectedTowerType = null;
         selectedTileType = null;
         clearPreview();
@@ -1329,6 +1394,7 @@ import { INITIAL_TILES, SPECIAL_TILE_TYPES, applyDotTick, canPlaceTile, getEffec
       return {
         renderStatus: canvas.dataset.renderStatus || 'unknown',
         renderCalls: renderer.info.render.calls,
+        gold: Math.floor(gold),
         mapCells: cellMeshList.length,
         walls: wallSet.size,
         routeCells: pathSetRoute.length,
@@ -1340,7 +1406,8 @@ import { INITIAL_TILES, SPECIAL_TILE_TYPES, applyDotTick, canPlaceTile, getEffec
         tiles: tiles.map((tile) => ({...tile})),
         tileInventory: inventory.filter((item) => item.type === 'tile').map((item) => item.key),
         enemyEffects: enemies.map((enemy) => ({activeTile: enemy.activeTile, speedMultiplier: enemy.activeTileEffect.speedMultiplier, dotDamage: enemy.activeTileEffect.dotDamage, dotTimer: enemy.dotTimer})),
-        towerStats: towers.map((tower) => ({key: tower.key, gx: tower.gx, gy: tower.gy, damage: tower.damage, fireRate: tower.fireRate, activeTile: tower.activeTile})),
+        towerStats: towers.map((tower) => ({key: tower.key, gx: tower.gx, gy: tower.gy, damage: tower.damage, range: tower.range, fireRate: tower.fireRate, activeTile: tower.activeTile})),
+        towerUpgrades: towers.map((tower) => ({...tower.upgrades})),
         previewVisible: Boolean(previewMesh),
         enemies: enemies.length,
         inventory: inventory.map((item) => item.key),
