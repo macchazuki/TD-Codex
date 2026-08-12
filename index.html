@@ -113,6 +113,7 @@
   #selectedPanel h3{font-family:'Orbitron',sans-serif; font-size:13px; letter-spacing:1px; margin-bottom:8px;}
   #selectedPanel .row{display:flex; justify-content:space-between; font-size:11px; color:var(--text-dim); margin-bottom:4px;}
   #selectedPanel .row b{color:var(--text); font-weight:400;}
+  #selEnchantments{color:var(--amber) !important;}
   #tileTooltip{
     position:absolute; z-index:4; width:220px; padding:10px 12px;
     background:var(--panel); border:1px solid #38ff8a; box-shadow:0 0 14px rgba(56,255,138,0.22);
@@ -242,6 +243,7 @@
         <div class="row"><span>RANGE</span><b id="selRange">-</b></div>
         <div class="row"><span>RATE</span><b id="selRate">-</b></div>
         <div class="row"><span>KILLS</span><b id="selKills">-</b></div>
+        <div class="row"><span>ENCHANTMENTS</span><b id="selEnchantments">-</b></div>
         <div class="upgrade-actions" aria-label="Tower upgrades">
           <button id="upgradeDamageBtn" class="upgrade-btn" data-stat="damage"><span>DAMAGE +20%</span><b id="damageUpgradeCost">⬡ 40</b></button>
           <button id="upgradeRangeBtn" class="upgrade-btn" data-stat="range"><span>RANGE +10%</span><b id="rangeUpgradeCost">⬡ 35</b></button>
@@ -279,6 +281,7 @@ import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enem
 import { addRewardToInventory, createRewardPool, drawRewards, removeFromInventory, removeInventoryItem } from './src/game/rewards.js';
 import { INITIAL_TILES, SPECIAL_TILE_TYPES, applyDotTick, canPlaceTile, getEffectiveTowerStats, getEnemyTileEffect, getTileAt } from './src/game/specialTiles.js';
 import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } from './src/game/upgrades.js';
+import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBounty, tickDotStacks } from './src/game/enchantments.js';
 
 (function(){
   "use strict";
@@ -290,12 +293,12 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
      STATE
   --------------------------------------------------------------------- */
   let gold = 150, lives = 20, wave = 0, waveInProgress = false, gameOver = false, awaitingReward = false;
-  let gameSpeed = DEFAULT_GAME_SPEED;
-  let selectedTowerType = null, selectedTileType = null;
+  let selectedTowerType = null, selectedTileType = null, selectedEnchantmentType = null;
   let selectedTower = null;
+  let gameSpeed = DEFAULT_GAME_SPEED;
   let spawnQueue = [], spawnTimer = 0;
   let towers = [], enemies = [], projectiles = [], effects = [], pulses = [];
-  const rewardPool = createRewardPool(TOWER_TYPES, SPECIAL_TILE_TYPES);
+  const rewardPool = createRewardPool(TOWER_TYPES, SPECIAL_TILE_TYPES, ENCHANTMENT_TYPES);
   let inventory = rewardPool.filter((reward) => reward.type === 'tower').map((reward) => ({...reward}));
   let tiles = INITIAL_TILES.map((tile) => ({...tile}));
   let currentRewards = [];
@@ -693,7 +696,7 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
       key: typeKey, cfg, group, gx, gy,
       baseDamage: stats.damage, baseFireRate: stats.fireRate,
       damage: stats.damage, range: stats.range, fireRate: stats.fireRate, splash: cfg.splash,
-      upgrades,
+      upgrades, enchantments: [...(inventoryItem?.enchantments || [])],
       cooldown: 0, target: null, kills: 0,
       rangeRing: null
     };
@@ -780,6 +783,7 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
       speed: type.speed, traveled: 0, alive: true, phase: Math.random()*10,
       dotTimer: 0, activeTile: null, activeTileEffect: {speedMultiplier: 1, dotDamage: 0},
       goldValue: type.gold, lifeDamage: type.dmg,
+      dotStacks: [],
       route: worldWaypoints.map(point => point.clone()),
       routeLengths: segLengths.slice(), routeTotalLength: pathTotalLength, routeVersion
     };
@@ -827,7 +831,7 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
     enemy.hp -= dmg;
     if(enemy.hp <= 0 && enemy.alive){
       enemy.alive = false;
-      gold += enemy.goldValue;
+      gold += calculateBounty(enemy.goldValue, sourceTower);
       updateGoldUI();
       if(sourceTower) sourceTower.kills++;
       spawnEffect(enemy.mesh.position, 0xffffff);
@@ -874,10 +878,14 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
       const tileEffect = getEnemyTileEffect(tile);
       enemy.activeTile = tile?.key || null;
       enemy.activeTileEffect = tileEffect;
+      const enchantmentTicks = tickDotStacks({enemy, dt});
+      enchantmentTicks.forEach((tick) => damageEnemy(enemy, tick.damage, tick.sourceTower));
+      if(!enemy.alive) continue;
       enemy.traveled += enemy.speed * tileEffect.speedMultiplier * dt;
       const dotTick = applyDotTick({timer: enemy.dotTimer, dt, damage: tileEffect.dotDamage, interval: tileEffect.dotInterval});
       enemy.dotTimer = tileEffect.dotDamage ? dotTick.timer : 0;
       if(dotTick.damage) damageEnemy(enemy, dotTick.damage, null);
+      if(!enemy.alive) continue;
       if(enemy.traveled >= enemy.routeTotalLength){
         lives -= enemy.lifeDamage;
         updateLivesUI();
@@ -947,11 +955,13 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
       const dist = dir.length();
       if(dist < 0.35){
         damageEnemy(proj.target, proj.damage, proj.sourceTower);
+        applyHitEnchantments({tower: proj.sourceTower, damage: proj.damage, enemy: proj.target});
         if(proj.splash > 0){
           for(const e of enemies){
             if(e === proj.target || !e.alive) continue;
             if(distXZ(e.mesh.position, targetPos) <= proj.splash){
               damageEnemy(e, proj.damage*0.6, proj.sourceTower);
+              applyHitEnchantments({tower: proj.sourceTower, damage: proj.damage*0.6, enemy: e});
             }
           }
         }
@@ -1041,14 +1051,14 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
   function buildNodeCards(){
     nodeCardsEl.innerHTML = '';
     inventory.forEach((item)=>{
-      const cfg = item.type === 'tile' ? SPECIAL_TILE_TYPES[item.key] : TOWER_TYPES[item.key];
+      const cfg = item.type === 'tile' ? SPECIAL_TILE_TYPES[item.key] : item.type === 'enchantment' ? ENCHANTMENT_TYPES[item.key] : TOWER_TYPES[item.key];
       if(!cfg) return;
       const card = document.createElement('div');
-      card.className = `node-card${item.type === 'tile' ? ' tile-card' : ''}`;
+      card.className = `node-card${item.type === 'tile' ? ' tile-card' : item.type === 'enchantment' ? ' enchantment-card' : ''}`;
       card.dataset.key = cfg.key;
       card.dataset.type = item.type;
       card.setAttribute('aria-label', `${cfg.name}, inventory item`);
-      card.classList.toggle('active', item.type === 'tile' ? selectedTileType === cfg.key : selectedTowerType === cfg.key);
+      card.classList.toggle('active', item.type === 'tile' ? selectedTileType === cfg.key : item.type === 'enchantment' ? selectedEnchantmentType === cfg.key : selectedTowerType === cfg.key);
       card.innerHTML = `
         <div class="node-icon">${iconShape(cfg.shape, cfg.color)}</div>
         <div class="node-name">${cfg.name}</div>
@@ -1057,14 +1067,17 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
       card.addEventListener('click', ()=>{
         if(gameOver || !inventory.some((inventoryItem) => inventoryItem.type === item.type && inventoryItem.key === cfg.key)) return;
         const isTile = item.type === 'tile';
-        const isSelected = isTile ? selectedTileType === cfg.key : selectedTowerType === cfg.key;
+        const isEnchantment = item.type === 'enchantment';
+        const isSelected = isTile ? selectedTileType === cfg.key : isEnchantment ? selectedEnchantmentType === cfg.key : selectedTowerType === cfg.key;
         if(isSelected){
           selectedTowerType = null;
           selectedTileType = null;
+          selectedEnchantmentType = null;
           clearPreview();
         } else {
-          selectedTowerType = isTile ? null : cfg.key;
+          selectedTowerType = isTile || item.type === 'enchantment' ? null : cfg.key;
           selectedTileType = isTile ? cfg.key : null;
+          selectedEnchantmentType = isEnchantment ? cfg.key : null;
           deselectTower();
           clearPreview();
         }
@@ -1115,7 +1128,7 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
         <div class="node-icon">${iconShape(reward.shape, reward.color)}</div>
         <div class="node-name">${reward.name}</div>
         <div class="node-desc">${reward.description}</div>
-        <div class="reward-stats"><span>${reward.type === 'tile' ? 'UTILITY TILE' : `DMG ${reward.damage}`}</span><span>${reward.type === 'tile' ? 'CONSUMABLE' : `RNG ${reward.range}`}</span></div>
+        <div class="reward-stats"><span>${reward.type === 'tile' ? 'UTILITY TILE' : reward.type === 'enchantment' ? 'PERMANENT' : `DMG ${reward.damage}`}</span><span>${reward.type === 'tile' ? 'CONSUMABLE' : reward.type === 'enchantment' ? 'STACKABLE' : `RNG ${reward.range}`}</span></div>
       `;
       card.addEventListener('click', ()=> selectReward(reward));
       rewardCardsEl.appendChild(card);
@@ -1149,6 +1162,7 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
   const selRange = document.getElementById('selRange');
   const selRate = document.getElementById('selRate');
   const selKills = document.getElementById('selKills');
+  const selEnchantments = document.getElementById('selEnchantments');
   const purgeBtn = document.getElementById('purgeBtn');
 
   function selectTower(tower){
@@ -1156,6 +1170,7 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
     selectedTower = tower;
     selectedTowerType = null;
     selectedTileType = null;
+    selectedEnchantmentType = null;
     clearPreview();
     refreshNodeCards();
     const ring = makeRangeRing(tower.range, tower.cfg.color);
@@ -1175,6 +1190,11 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
     selRange.textContent = selectedTower.range.toFixed(1);
     selRate.textContent = selectedTower.fireRate.toFixed(2)+'/s';
     selKills.textContent = selectedTower.kills;
+    const enchantmentCounts = Object.keys(ENCHANTMENT_TYPES).map((key) => {
+      const count = selectedTower.enchantments.filter((enchantment) => enchantment === key).length;
+      return count ? `${ENCHANTMENT_TYPES[key].name} ×${count}` : null;
+    }).filter(Boolean);
+    selEnchantments.textContent = enchantmentCounts.join(', ') || 'NONE';
     Object.keys(UPGRADE_STATS).forEach((stat)=>{
       const cost = getUpgradeCost(selectedTower, stat);
       const controls = upgradeButtons[stat];
@@ -1213,7 +1233,7 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
   purgeBtn.addEventListener('click', ()=>{
     if(!selectedTower) return;
     const reward = rewardPool.find((item) => item.key === selectedTower.key);
-    addRewardToInventory(inventory, {...reward, upgrades: {...selectedTower.upgrades}});
+    addRewardToInventory(inventory, {...reward, upgrades: {...selectedTower.upgrades}, enchantments: [...selectedTower.enchantments]});
     removeTower(selectedTower);
     deselectTower();
     refreshNodeCards();
@@ -1318,8 +1338,18 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
     const {gx, gy} = cell;
     const key = cellKey(gx, gy);
     const towerOnCell = towers.find(tower => cellKey(tower.gx, tower.gy) === key);
-    if(towerOnCell){ selectTower(towerOnCell); return; }
+    if(towerOnCell){
+      if(selectedEnchantmentType){
+        const enchantmentKey = selectedEnchantmentType;
+        const result = applyEnchantment({tower: towerOnCell, inventory, typeKey: enchantmentKey});
+        if(result.ok){ selectedEnchantmentType = null; selectTower(towerOnCell); showMessage(`${ENCHANTMENT_TYPES[enchantmentKey].name.toUpperCase()} APPLIED`); }
+        else showMessage(result.reason === 'unavailable' ? 'NO ENCHANTMENT IN INVENTORY' : 'INVALID TARGET');
+      } else selectTower(towerOnCell);
+      return;
+    }
     const isTile = Boolean(selectedTileType);
+    const isEnchantment = Boolean(selectedEnchantmentType);
+    if(isEnchantment){ showMessage('SELECT A TOWER'); return; }
     const typeKey = isTile ? selectedTileType : selectedTowerType;
     const placement = isTile
       ? canPlaceTile({gx, gy, gridW: GRID_W, gridH: GRID_H, occupied: occupiedSet, tiles, inventory, typeKey})
@@ -1339,6 +1369,7 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
     }
     selectedTowerType = null;
     selectedTileType = null;
+    selectedEnchantmentType = null;
     clearPreview();
     refreshNodeCards();
   }
@@ -1351,9 +1382,33 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
     if(towerHits.length){
       let obj = towerHits[0].object;
       while(obj && !obj.userData.towerRef) obj = obj.parent;
-      if(obj && obj.userData.towerRef){ selectTower(obj.userData.towerRef); return; }
+      if(obj && obj.userData.towerRef){
+        if(selectedEnchantmentType){
+          const enchantmentKey = selectedEnchantmentType;
+          const result = applyEnchantment({tower: obj.userData.towerRef, inventory, typeKey: enchantmentKey});
+          if(result.ok){
+            selectedEnchantmentType = null;
+            selectTower(obj.userData.towerRef);
+            showMessage(`${ENCHANTMENT_TYPES[enchantmentKey].name.toUpperCase()} APPLIED`);
+          } else showMessage(result.reason === 'unavailable' ? 'NO ENCHANTMENT IN INVENTORY' : 'INVALID TARGET');
+        } else selectTower(obj.userData.towerRef);
+        return;
+      }
     }
-    if(selectedTowerType || selectedTileType){
+    if(selectedTowerType || selectedTileType || selectedEnchantmentType){
+      if(selectedEnchantmentType && towerHits.length){
+        let obj = towerHits[0].object;
+        while(obj && !obj.userData.towerRef) obj = obj.parent;
+        const result = applyEnchantment({tower: obj?.userData.towerRef, inventory, typeKey: selectedEnchantmentType});
+        if(result.ok){
+          const enchantmentKey = selectedEnchantmentType;
+          selectedEnchantmentType = null;
+          refreshNodeCards();
+          refreshSelectedTowerUI();
+          showMessage(`${ENCHANTMENT_TYPES[enchantmentKey].name.toUpperCase()} APPLIED`);
+        } else showMessage(result.reason === 'unavailable' ? 'NO ENCHANTMENT IN INVENTORY' : 'SELECT A TOWER');
+        return;
+      }
       placeSelectedAtPointer(e);
       return;
     }
@@ -1530,7 +1585,7 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
       return;
     }
     updateTileTooltip(e);
-    if(!selectedTowerType && !selectedTileType) return;
+    if(!selectedTowerType && !selectedTileType && !selectedEnchantmentType) return;
     setMouseFromEvent(e);
     raycaster.setFromCamera(mouseNDC, camera);
     const cellHits = raycaster.intersectObjects(cellMeshList);
@@ -1544,14 +1599,15 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
       if(key !== hoveredCellKey){
         hoveredCellKey = key;
         const isTile = Boolean(selectedTileType);
-        const typeKey = isTile ? selectedTileType : selectedTowerType;
-        const cfg = isTile ? SPECIAL_TILE_TYPES[typeKey] : TOWER_TYPES[typeKey];
+        const isEnchantment = Boolean(selectedEnchantmentType);
+        const typeKey = isTile ? selectedTileType : isEnchantment ? selectedEnchantmentType : selectedTowerType;
+        const cfg = isTile ? SPECIAL_TILE_TYPES[typeKey] : isEnchantment ? ENCHANTMENT_TYPES[typeKey] : TOWER_TYPES[typeKey];
         const valid = isTile
           ? canPlaceTile({gx, gy, gridW: GRID_W, gridH: GRID_H, occupied: occupiedSet, tiles, inventory, typeKey}).ok
-          : wallSet.has(key) && !occupiedSet.has(key);
+          : isEnchantment ? towers.some((tower) => cellKey(tower.gx, tower.gy) === key) : wallSet.has(key) && !occupiedSet.has(key);
         const p = gridToWorld(gx,gy);
         if(isTile) ensureTilePreview(typeKey);
-        else ensurePreview(cfg);
+        else if(!isEnchantment) ensurePreview(cfg);
         previewMesh.position.set(p.x, isTile ? 0 : WALL_TOP, p.z);
         if(previewRing) previewRing.position.set(p.x,WALL_TOP + 0.02,p.z);
         previewMesh.traverse(o=>{ if(o.material) o.material.opacity = valid?0.6:0.25; });
@@ -1634,7 +1690,7 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
     spawnQueue = []; spawnTimer = 0;
     inventory = rewardPool.filter((reward) => reward.type === 'tower').map((reward) => ({...reward}));
     currentRewards = [];
-    selectedTowerType = null; selectedTileType = null; clearPreview(); deselectTower();
+    selectedTowerType = null; selectedTileType = null; selectedEnchantmentType = null; clearPreview(); deselectTower();
     updateGoldUI(); updateLivesUI(); updateWaveUI(); refreshWaveButton(); refreshNodeCards();
     rewardCardsEl.innerHTML = '';
     rewardOverlay.classList.add('hidden');
@@ -1660,9 +1716,12 @@ import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } fr
         towers: towers.length,
         tiles: tiles.map((tile) => ({...tile})),
         tileInventory: inventory.filter((item) => item.type === 'tile').map((item) => item.key),
+        enchantmentInventory: inventory.filter((item) => item.type === 'enchantment').map((item) => item.key),
         enemyEffects: enemies.map((enemy) => ({activeTile: enemy.activeTile, speedMultiplier: enemy.activeTileEffect.speedMultiplier, dotDamage: enemy.activeTileEffect.dotDamage, dotTimer: enemy.dotTimer})),
         towerStats: towers.map((tower) => ({key: tower.key, gx: tower.gx, gy: tower.gy, damage: tower.damage, range: tower.range, fireRate: tower.fireRate, activeTile: tower.activeTile})),
         towerUpgrades: towers.map((tower) => ({...tower.upgrades})),
+        towerEnchantments: towers.map((tower) => [...tower.enchantments]),
+        activeDotEffects: enemies.flatMap((enemy) => enemy.dotStacks.map((stack) => ({type: stack.typeKey, damage: stack.damage, remainingTicks: stack.remainingTicks}))),
         previewVisible: Boolean(previewMesh),
         wallEditAction,
         cameraTarget: {x: camTarget.x, y: camTarget.y, z: camTarget.z},
