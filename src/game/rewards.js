@@ -47,9 +47,13 @@ export function createTileRewardPool(tileTypes) {
   }));
 }
 
-/** Creates the mixed tower and tile wave reward pool. */
-export function createRewardPool(towerTypes, tileTypes) {
-  return [...createTowerRewardPool(towerTypes), ...createTileRewardPool(tileTypes)];
+/** Creates the mixed tower, tile, and optional enchantment reward pool. */
+export function createRewardPool(towerTypes, tileTypes, enchantmentTypes = {}) {
+  const enchantments = Object.values(enchantmentTypes).map((enchantment) => ({
+    type: 'enchantment', key: enchantment.key, name: enchantment.name, description: enchantment.desc,
+    color: enchantment.color, shape: enchantment.shape
+  }));
+  return [...createTowerRewardPool(towerTypes), ...createTileRewardPool(tileTypes), ...enchantments];
 }
 
 /** Adds one separate copy of a selected reward to the inventory array. */
