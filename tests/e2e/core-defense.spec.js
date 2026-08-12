@@ -170,6 +170,27 @@ test.describe('mobile canvas controls', () => {
     await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().cameraDistance)).toBe(10);
   });
 
+  test('continues pinch zoom when one finger is replaced', async ({page}) => {
+    await page.goto('./');
+    const center = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(4, 4));
+    const first = {x: center.x - 40, y: center.y};
+    const second = {x: center.x + 40, y: center.y};
+
+    await dispatchTouchPointer(page, 'pointerdown', 1, first);
+    await dispatchTouchPointer(page, 'pointerdown', 2, second);
+    await dispatchTouchPointer(page, 'pointermove', 1, {x: center.x - 120, y: center.y});
+    await dispatchTouchPointer(page, 'pointermove', 2, {x: center.x + 120, y: center.y});
+    const distanceAfterFirstPinch = await page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().cameraDistance);
+    await dispatchTouchPointer(page, 'pointerup', 1, first);
+    await dispatchTouchPointer(page, 'pointerdown', 3, {x: center.x - 40, y: center.y});
+    await dispatchTouchPointer(page, 'pointermove', 2, {x: center.x + 160, y: center.y});
+    await dispatchTouchPointer(page, 'pointermove', 3, {x: center.x - 160, y: center.y});
+    await dispatchTouchPointer(page, 'pointerup', 2, second);
+    await dispatchTouchPointer(page, 'pointerup', 3, {x: center.x - 160, y: center.y});
+
+    await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().cameraDistance)).toBeLessThan(distanceAfterFirstPinch);
+  });
+
   test('gesture cancellation and transitions clear wall editing', async ({page}) => {
     await page.goto('./');
     const first = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
