@@ -73,6 +73,14 @@
   #waveBtn:disabled{opacity:0.35; cursor:not-allowed; color:var(--text-dim); border-color:var(--panel-border); text-shadow:none;}
 
   #speedControls{position:relative; z-index:30; display:flex; gap:4px; align-items:center; white-space:nowrap;}
+  #wallModeControls{position:relative; z-index:30; display:flex; gap:4px; align-items:center; white-space:nowrap;}
+  .wall-mode-btn{
+    font-family:'Orbitron',sans-serif; font-weight:700; font-size:10px; letter-spacing:0.5px;
+    padding:8px 9px; color:var(--text-dim); background:rgba(10,16,30,0.5);
+    border:1px solid var(--panel-border); cursor:pointer; transition:all .15s ease;
+  }
+  .wall-mode-btn:hover{border-color:var(--amber); color:var(--text);}
+  .wall-mode-btn.active{color:var(--amber); border-color:var(--amber); background:rgba(255,149,0,0.16); box-shadow:0 0 10px rgba(255,149,0,0.22);}
   .speed-btn{
     font-family:'Orbitron',sans-serif; font-weight:700; font-size:10px; letter-spacing:0.5px;
     padding:8px 9px; color:var(--text-dim); background:rgba(10,16,30,0.5);
@@ -225,6 +233,11 @@
         <div class="stat wave"><span class="glyph">▣</span><span id="waveVal">0</span>/<span id="waveMax">10</span><label>WAVE</label></div>
       </div>
       <button id="waveBtn">INITIATE WAVE</button>
+      <div id="wallModeControls" aria-label="Wall editing mode">
+        <button class="wall-mode-btn active" type="button" data-wall-mode="normal" aria-pressed="true">Normal</button>
+        <button class="wall-mode-btn" type="button" data-wall-mode="build" aria-pressed="false">Build</button>
+        <button class="wall-mode-btn" type="button" data-wall-mode="remove" aria-pressed="false">Remove</button>
+      </div>
       <div id="speedControls" aria-label="Game speed">
         <button class="speed-btn" type="button" data-speed="0.5" aria-label="Set game speed to 0.5x" aria-pressed="false">0.5x</button>
         <button class="speed-btn active" type="button" data-speed="1" aria-label="Set game speed to 1x" aria-pressed="true">1x</button>
@@ -253,7 +266,7 @@
         </div>
       </div>
     </div>
-    <div id="hint"><span id="desktopHint">LEFT-DRAG: place walls · RIGHT-DRAG: remove walls · CLICK: select node or tile &nbsp;·&nbsp; SCROLL: zoom</span><span id="mobileHint">1-FINGER DRAG: PLACE/CLEAR WALLS · 2-FINGER DRAG: PAN · PINCH: ZOOM</span></div>
+    <div id="hint"><span id="desktopHint">NORMAL: select nodes/tiles · BUILD: left-drag walls · REMOVE: left-drag walls · MIDDLE-DRAG: pan · SCROLL: zoom</span><span id="mobileHint">NORMAL: TAP TO SELECT · BUILD/REMOVE: 1-FINGER TAP/DRAG · 2-FINGER DRAG: PAN · PINCH: ZOOM</span></div>
   </div>
 
   <div id="rewardOverlay" class="hidden" aria-labelledby="rewardTitle">
@@ -296,6 +309,7 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
   let selectedTowerType = null, selectedTileType = null, selectedEnchantmentType = null;
   let selectedTower = null;
   let gameSpeed = DEFAULT_GAME_SPEED;
+  let wallEditMode = 'normal';
   let spawnQueue = [], spawnTimer = 0;
   let towers = [], enemies = [], projectiles = [], effects = [], pulses = [];
   const rewardPool = createRewardPool(TOWER_TYPES, SPECIAL_TILE_TYPES, ENCHANTMENT_TYPES);
@@ -997,6 +1011,7 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
   const waveValEl = document.getElementById('waveVal');
   const waveBtn = document.getElementById('waveBtn');
   const speedButtons = [...document.querySelectorAll('.speed-btn')];
+  const wallModeButtons = [...document.querySelectorAll('.wall-mode-btn')];
   const nodeCardsEl = document.getElementById('nodeCards');
   const selectedPanel = document.getElementById('selectedPanel');
   const towerDetails = document.getElementById('towerDetails');
@@ -1031,6 +1046,20 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
     if(!isSupportedGameSpeed(speed)) return false;
     gameSpeed = speed;
     refreshSpeedButtons();
+    return true;
+  }
+  function refreshWallModeButtons(){
+    wallModeButtons.forEach((button) => {
+      const isActive = button.dataset.wallMode === wallEditMode;
+      button.classList.toggle('active', isActive);
+      button.setAttribute('aria-pressed', String(isActive));
+    });
+  }
+  function setWallEditMode(mode){
+    if(!['normal', 'build', 'remove'].includes(mode)) return false;
+    wallEditMode = mode;
+    resetWallEditing();
+    refreshWallModeButtons();
     return true;
   }
   function refreshWaveButton(){
@@ -1243,7 +1272,11 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
   speedButtons.forEach((button) => {
     button.addEventListener('click', () => setGameSpeed(Number(button.dataset.speed)));
   });
+  wallModeButtons.forEach((button) => {
+    button.addEventListener('click', () => setWallEditMode(button.dataset.wallMode));
+  });
   refreshSpeedButtons();
+  refreshWallModeButtons();
   refreshWaveButton();
 
   document.getElementById('restartBtn').addEventListener('click', resetGame);
@@ -1374,8 +1407,18 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
     refreshNodeCards();
   }
 
-  function handlePrimaryPointerDown(e, wallAction, shouldDeferWallEdit = false){
+  function handlePrimaryPointerDown(e, shouldDeferWallEdit = false){
     if(gameOver) return;
+    const wallAction = wallEditMode === 'build' ? 'place' : wallEditMode === 'remove' ? 'remove' : null;
+    if(wallAction){
+      const cell = getCellAtPointer(e);
+      if(cell){
+        wallEditAction = wallAction;
+        lastEditedCellKey = null;
+        if(!shouldDeferWallEdit) editWallCell(cell.gx, cell.gy, wallEditAction);
+      }
+      return;
+    }
     setMouseFromEvent(e);
     raycaster.setFromCamera(mouseNDC, camera);
     const towerHits = raycaster.intersectObjects(towersGroup.children, true);
@@ -1412,14 +1455,6 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
       placeSelectedAtPointer(e);
       return;
     }
-    const tile = getTileAtPointer(e);
-    if(tile){
-      wallEditAction = wallAction;
-      lastEditedCellKey = null;
-      if(!shouldDeferWallEdit) editWallCell(tile.gx, tile.gy, wallEditAction);
-      return;
-    }
-
     const cell = getCellAtPointer(e);
     if(!cell){
       deselectTower();
@@ -1431,9 +1466,6 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
       selectTower(towerOnCell);
       return;
     }
-    wallEditAction = wallAction;
-    lastEditedCellKey = null;
-    if(!shouldDeferWallEdit) editWallCell(cell.gx, cell.gy, wallEditAction);
   }
 
   function clampCameraTarget(){
@@ -1509,8 +1541,7 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
     activeTouchPointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
     if(activeTouchPointers.size === 1){
       const cell = getCellAtPointer(e);
-      const wallAction = cell && wallSet.has(cellKey(cell.gx, cell.gy)) ? 'remove' : 'place';
-      handlePrimaryPointerDown(e, wallAction, true);
+      handlePrimaryPointerDown(e, true);
       if(wallEditAction && cell) touchEditStartCell = cell;
       return;
     }
@@ -1562,22 +1593,14 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
       handleTouchPointerDown(e);
       return;
     }
-    if(e.button === 2){
-      if(!gameOver){
-        wallEditAction = 'remove';
-        lastEditedCellKey = null;
-        const cell = getCellAtPointer(e);
-        if(cell) editWallCell(cell.gx, cell.gy, wallEditAction);
-      }
-      return;
-    }
+    if(e.button === 2) return;
     if(e.button === 1){
       resetWallEditing();
       mousePanPoint = {x: e.clientX, y: e.clientY};
       return;
     }
     if(e.button !== 0 || gameOver) return;
-    handlePrimaryPointerDown(e, 'place');
+    handlePrimaryPointerDown(e);
   });
 
   window.addEventListener('pointermove', (e)=>{
@@ -1702,6 +1725,7 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
     spawnQueue = []; spawnTimer = 0;
     inventory = rewardPool.filter((reward) => reward.type === 'tower').map((reward) => ({...reward}));
     currentRewards = [];
+    setWallEditMode('normal');
     selectedTowerType = null; selectedTileType = null; selectedEnchantmentType = null; clearPreview(); deselectTower();
     updateGoldUI(); updateLivesUI(); updateWaveUI(); refreshWaveButton(); refreshNodeCards();
     rewardCardsEl.innerHTML = '';
@@ -1736,6 +1760,7 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
         activeDotEffects: enemies.flatMap((enemy) => enemy.dotStacks.map((stack) => ({type: stack.typeKey, damage: stack.damage, remainingTicks: stack.remainingTicks}))),
         previewVisible: Boolean(previewMesh),
         wallEditAction,
+        wallEditMode,
         cameraTarget: {x: camTarget.x, y: camTarget.y, z: camTarget.z},
         cameraDistance: camDistance,
         enemies: enemies.length,
@@ -1760,6 +1785,9 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
     },
     setGameSpeedForTest(speed){
       return setGameSpeed(speed);
+    },
+    setWallEditModeForTest(mode){
+      return setWallEditMode(mode);
     },
     projectCell(gx, gy){
       const p = gridToWorld(gx, gy).setY(0);
