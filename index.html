@@ -36,6 +36,7 @@
 
   .hud-top{
     pointer-events:auto;
+    position:relative; z-index:30;
     display:flex; align-items:center; gap:18px;
     margin:14px 14px 0 14px;
     padding:10px 18px;
@@ -71,6 +72,15 @@
   #waveBtn:hover:not(:disabled){background:rgba(0,229,255,0.25); box-shadow:0 0 16px rgba(0,229,255,0.35);}
   #waveBtn:disabled{opacity:0.35; cursor:not-allowed; color:var(--text-dim); border-color:var(--panel-border); text-shadow:none;}
 
+  #speedControls{position:relative; z-index:30; display:flex; gap:4px; align-items:center; white-space:nowrap;}
+  .speed-btn{
+    font-family:'Orbitron',sans-serif; font-weight:700; font-size:10px; letter-spacing:0.5px;
+    padding:8px 9px; color:var(--text-dim); background:rgba(10,16,30,0.5);
+    border:1px solid var(--panel-border); cursor:pointer; transition:all .15s ease;
+  }
+  .speed-btn:hover{border-color:var(--cyan); color:var(--text);}
+  .speed-btn.active{color:var(--cyan); border-color:var(--cyan); background:rgba(0,229,255,0.16); box-shadow:0 0 10px rgba(0,229,255,0.22);}
+
   .hud-bottom{
     pointer-events:auto;
     display:flex; align-items:flex-end; justify-content:space-between; gap:14px;
@@ -104,6 +114,14 @@
   #selectedPanel .row{display:flex; justify-content:space-between; font-size:11px; color:var(--text-dim); margin-bottom:4px;}
   #selectedPanel .row b{color:var(--text); font-weight:400;}
   #selEnchantments{color:var(--amber) !important;}
+  #tileTooltip{
+    position:absolute; z-index:4; width:220px; padding:10px 12px;
+    background:var(--panel); border:1px solid #38ff8a; box-shadow:0 0 14px rgba(56,255,138,0.22);
+    backdrop-filter:blur(6px); pointer-events:none; transition:opacity .12s ease;
+  }
+  #tileTooltip.hidden{display:none;}
+  #tileTooltip h3{font-family:'Orbitron',sans-serif; font-size:11px; letter-spacing:.7px; margin-bottom:5px; color:#38ff8a;}
+  #tileTooltip p{font-size:10px; color:var(--text-dim); line-height:1.4;}
   .upgrade-actions{display:flex; flex-direction:column; gap:4px; margin-top:8px;}
   .upgrade-btn{
     display:flex; justify-content:space-between; align-items:center; width:100%; padding:6px 8px;
@@ -193,6 +211,10 @@
 <body>
 <div id="app">
   <canvas id="gameCanvas"></canvas>
+  <div id="tileTooltip" class="hidden" role="status" aria-live="polite">
+    <h3 id="tileTooltipName"></h3>
+    <p id="tileTooltipDescription"></p>
+  </div>
 
   <div id="hud">
     <div class="hud-top brackets">
@@ -203,6 +225,11 @@
         <div class="stat wave"><span class="glyph">▣</span><span id="waveVal">0</span>/<span id="waveMax">10</span><label>WAVE</label></div>
       </div>
       <button id="waveBtn">INITIATE WAVE</button>
+      <div id="speedControls" aria-label="Game speed">
+        <button class="speed-btn" type="button" data-speed="0.5" aria-label="Set game speed to 0.5x" aria-pressed="false">0.5x</button>
+        <button class="speed-btn active" type="button" data-speed="1" aria-label="Set game speed to 1x" aria-pressed="true">1x</button>
+        <button class="speed-btn" type="button" data-speed="2" aria-label="Set game speed to 2x" aria-pressed="false">2x</button>
+      </div>
     </div>
 
     <div id="message"></div>
@@ -211,6 +238,7 @@
       <div id="nodeCards" class="brackets"></div>
       <div id="selectedPanel" class="hidden brackets">
         <h3 id="selName">NODE</h3>
+        <div id="towerDetails">
         <div class="row"><span>DAMAGE</span><b id="selDmg">-</b></div>
         <div class="row"><span>RANGE</span><b id="selRange">-</b></div>
         <div class="row"><span>RATE</span><b id="selRate">-</b></div>
@@ -222,6 +250,7 @@
           <button id="upgradeFireRateBtn" class="upgrade-btn" data-stat="fireRate"><span>RATE +15%</span><b id="fireRateUpgradeCost">⬡ 45</b></button>
         </div>
         <button id="purgeBtn">PURGE NODE</button>
+        </div>
       </div>
     </div>
     <div id="hint"><span id="desktopHint">LEFT-DRAG: place walls · RIGHT-DRAG: remove walls · CLICK: select node or tile &nbsp;·&nbsp; SCROLL: zoom</span><span id="mobileHint">1-FINGER DRAG: PLACE/CLEAR WALLS · 2-FINGER DRAG: PAN · PINCH: ZOOM</span></div>
@@ -247,6 +276,7 @@
 <script type="module">
 import * as THREE from 'three';
 import { CELL, ENEMY_TYPES, GRID_H, GRID_W, MAX_WAVE, TOWER_TYPES } from './src/game/config.js';
+import { DEFAULT_GAME_SPEED, isSupportedGameSpeed, scaleDelta } from './src/game/speed.js';
 import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enemyHealth, findPath, generateWave } from './src/game/rules.js';
 import { addRewardToInventory, createRewardPool, drawRewards, removeFromInventory, removeInventoryItem } from './src/game/rewards.js';
 import { INITIAL_TILES, SPECIAL_TILE_TYPES, applyDotTick, canPlaceTile, getEffectiveTowerStats, getEnemyTileEffect, getTileAt } from './src/game/specialTiles.js';
@@ -265,6 +295,7 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
   let gold = 150, lives = 20, wave = 0, waveInProgress = false, gameOver = false, awaitingReward = false;
   let selectedTowerType = null, selectedTileType = null, selectedEnchantmentType = null;
   let selectedTower = null;
+  let gameSpeed = DEFAULT_GAME_SPEED;
   let spawnQueue = [], spawnTimer = 0;
   let towers = [], enemies = [], projectiles = [], effects = [], pulses = [];
   const rewardPool = createRewardPool(TOWER_TYPES, SPECIAL_TILE_TYPES, ENCHANTMENT_TYPES);
@@ -965,8 +996,13 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
   const livesValEl = document.getElementById('livesVal');
   const waveValEl = document.getElementById('waveVal');
   const waveBtn = document.getElementById('waveBtn');
+  const speedButtons = [...document.querySelectorAll('.speed-btn')];
   const nodeCardsEl = document.getElementById('nodeCards');
   const selectedPanel = document.getElementById('selectedPanel');
+  const towerDetails = document.getElementById('towerDetails');
+  const tileTooltip = document.getElementById('tileTooltip');
+  const tileTooltipName = document.getElementById('tileTooltipName');
+  const tileTooltipDescription = document.getElementById('tileTooltipDescription');
   const messageEl = document.getElementById('message');
   const rewardOverlay = document.getElementById('rewardOverlay');
   const rewardCardsEl = document.getElementById('rewardCards');
@@ -984,6 +1020,19 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
   function updateGoldUI(){ goldValEl.textContent = Math.floor(gold); refreshNodeCards(); refreshSelectedTowerUI(); }
   function updateLivesUI(){ livesValEl.textContent = Math.max(0,Math.floor(lives)); }
   function updateWaveUI(){ waveValEl.textContent = wave; }
+  function refreshSpeedButtons(){
+    speedButtons.forEach((button) => {
+      const isActive = Number(button.dataset.speed) === gameSpeed;
+      button.classList.toggle('active', isActive);
+      button.setAttribute('aria-pressed', String(isActive));
+    });
+  }
+  function setGameSpeed(speed){
+    if(!isSupportedGameSpeed(speed)) return false;
+    gameSpeed = speed;
+    refreshSpeedButtons();
+    return true;
+  }
   function refreshWaveButton(){
     waveBtn.disabled = waveInProgress || awaitingReward || gameOver || wave>=MAX_WAVE;
     waveBtn.textContent = wave>=MAX_WAVE ? 'ALL WAVES CLEARED' : (awaitingReward ? 'SELECT REWARD' : (waveInProgress ? 'WAVE IN PROGRESS' : (wave===0 ? 'INITIATE WAVE' : 'NEXT WAVE')));
@@ -1135,6 +1184,7 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
   }
   function refreshSelectedTowerUI(){
     if(!selectedTower) return;
+    towerDetails.classList.remove('hidden');
     selName.textContent = selectedTower.cfg.name.toUpperCase();
     selDmg.textContent = selectedTower.damage.toFixed(1).replace('.0', '');
     selRange.textContent = selectedTower.range.toFixed(1);
@@ -1190,6 +1240,10 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
   });
 
   waveBtn.addEventListener('click', startWave);
+  speedButtons.forEach((button) => {
+    button.addEventListener('click', () => setGameSpeed(Number(button.dataset.speed)));
+  });
+  refreshSpeedButtons();
   refreshWaveButton();
 
   document.getElementById('restartBtn').addEventListener('click', resetGame);
@@ -1219,6 +1273,41 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
     raycaster.setFromCamera(mouseNDC, camera);
     const cellHits = raycaster.intersectObjects(cellMeshList);
     return cellHits.length ? cellHits[0].object.userData : null;
+  }
+
+  function getTileAtPointer(e){
+    setMouseFromEvent(e);
+    raycaster.setFromCamera(mouseNDC, camera);
+    const tileHits = raycaster.intersectObjects(tileGroup.children, true);
+    if(!tileHits.length) return null;
+    let object = tileHits[0].object;
+    while(object && !object.userData.tileRef) object = object.parent;
+    return object?.userData.tileRef || null;
+  }
+
+  function hideTileTooltip(){
+    tileTooltip.classList.add('hidden');
+  }
+
+  function updateTileTooltip(e){
+    const tile = getTileAtPointer(e);
+    if(!tile){
+      hideTileTooltip();
+      return;
+    }
+    const definition = SPECIAL_TILE_TYPES[tile.key];
+    if(!definition){
+      hideTileTooltip();
+      return;
+    }
+    tileTooltipName.textContent = definition.name.toUpperCase();
+    tileTooltipDescription.textContent = definition.desc;
+    tileTooltip.classList.remove('hidden');
+    const appRect = document.getElementById('app').getBoundingClientRect();
+    const left = Math.min(e.clientX - appRect.left + 14, appRect.width - tileTooltip.offsetWidth - 12);
+    const top = Math.min(e.clientY - appRect.top + 14, appRect.height - tileTooltip.offsetHeight - 12);
+    tileTooltip.style.left = `${Math.max(12, left)}px`;
+    tileTooltip.style.top = `${Math.max(12, top)}px`;
   }
 
   function editWallCell(gx, gy, action){
@@ -1321,6 +1410,13 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
         return;
       }
       placeSelectedAtPointer(e);
+      return;
+    }
+    const tile = getTileAtPointer(e);
+    if(tile){
+      wallEditAction = wallAction;
+      lastEditedCellKey = null;
+      if(!shouldDeferWallEdit) editWallCell(tile.gx, tile.gy, wallEditAction);
       return;
     }
 
@@ -1478,14 +1574,17 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
       return;
     }
     if(mousePanPoint){
+      hideTileTooltip();
       updateMousePan(e);
       return;
     }
     if(wallEditAction){
+      hideTileTooltip();
       const cell = getCellAtPointer(e);
       if(cell) editWallCell(cell.gx, cell.gy, wallEditAction);
       return;
     }
+    updateTileTooltip(e);
     if(!selectedTowerType && !selectedTileType && !selectedEnchantmentType) return;
     setMouseFromEvent(e);
     raycaster.setFromCamera(mouseNDC, camera);
@@ -1516,6 +1615,7 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
       }
     }
   });
+  canvas.addEventListener('pointerleave', hideTileTooltip);
   window.addEventListener('pointerup', (e)=>{
     if(e.pointerType === 'touch'){
       handleTouchPointerEnd(e);
@@ -1586,6 +1686,7 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
     tiles = INITIAL_TILES.map((tile) => ({...tile}));
     renderAllTiles();
     gold = 150; lives = 20; wave = 0; waveInProgress = false; gameOver = false; awaitingReward = false;
+    setGameSpeed(DEFAULT_GAME_SPEED);
     spawnQueue = []; spawnTimer = 0;
     inventory = rewardPool.filter((reward) => reward.type === 'tower').map((reward) => ({...reward}));
     currentRewards = [];
@@ -1629,7 +1730,9 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
         inventory: inventory.map((item) => item.key),
         inventoryItems: inventory.map((item) => ({type: item.type, key: item.key})),
         awaitingReward,
-        rewardChoices: currentRewards.map((reward) => reward.key)
+        rewardChoices: currentRewards.map((reward) => reward.key),
+        gameSpeed,
+        simulationElapsed: elapsed
       };
     },
     showWaveRewardForTest(){
@@ -1642,6 +1745,9 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
     },
     resetGameForTest(){
       resetGame();
+    },
+    setGameSpeedForTest(speed){
+      return setGameSpeed(speed);
     },
     projectCell(gx, gy){
       const p = gridToWorld(gx, gy).setY(0);
@@ -1661,7 +1767,8 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
   let elapsed = 0;
   function animate(){
     requestAnimationFrame(animate);
-    const dt = Math.min(clock.getDelta(), 0.05);
+    const realDt = Math.min(clock.getDelta(), 0.05);
+    const dt = scaleDelta(realDt, gameSpeed);
     elapsed += dt;
 
     if(!gameOver){

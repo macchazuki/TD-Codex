@@ -27,6 +27,57 @@ test('loads the game and exposes the initial HUD', async ({page}) => {
   });
 });
 
+test('shows game speed controls with normal speed active', async ({page}) => {
+  await page.goto('./');
+  await expect(page.locator('.speed-btn')).toHaveCount(3);
+  await expect(page.locator('.speed-btn.active')).toHaveText('1x');
+  await expect(page.locator('.speed-btn[data-speed="1"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().gameSpeed)).toBe(1);
+});
+
+test('switches between all supported game speeds', async ({page}) => {
+  await page.goto('./');
+  for (const speed of ['0.5', '1', '2']) {
+    await page.locator(`.speed-btn[data-speed="${speed}"]`).click();
+    await expect(page.locator('.speed-btn.active')).toHaveText(`${speed}x`);
+    await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().gameSpeed)).toBe(Number(speed));
+  }
+});
+
+test('scales simulation elapsed time with game speed', async ({page}) => {
+  await page.goto('./');
+  await page.evaluate(() => window.__CORE_DEFENSE__.setGameSpeedForTest(0.5));
+  const slowStart = await page.evaluate(() => ({
+    realTime: performance.now(),
+    simulationTime: window.__CORE_DEFENSE__.getSceneState().simulationElapsed
+  }));
+  await page.waitForFunction((start) => window.__CORE_DEFENSE__.getSceneState().simulationElapsed >= start + 0.15, slowStart.simulationTime);
+  const slowDuration = await page.evaluate((start) => performance.now() - start, slowStart.realTime);
+
+  await page.evaluate(() => window.__CORE_DEFENSE__.setGameSpeedForTest(2));
+  const fastStart = await page.evaluate(() => ({
+    realTime: performance.now(),
+    simulationTime: window.__CORE_DEFENSE__.getSceneState().simulationElapsed
+  }));
+  await page.waitForFunction((start) => window.__CORE_DEFENSE__.getSceneState().simulationElapsed >= start + 0.15, fastStart.simulationTime);
+  const fastDuration = await page.evaluate((start) => performance.now() - start, fastStart.realTime);
+
+  expect(slowDuration).toBeGreaterThan(fastDuration * 1.5);
+});
+
+test('resets game speed and keeps controls usable over the reward overlay', async ({page}) => {
+  await page.goto('./');
+  await page.locator('.speed-btn[data-speed="2"]').click();
+  await page.evaluate(() => window.__CORE_DEFENSE__.showWaveRewardForTest());
+  await expect(page.locator('#rewardOverlay')).toBeVisible();
+  await page.locator('.speed-btn[data-speed="0.5"]').click();
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().gameSpeed)).toBe(0.5);
+
+  await page.evaluate(() => window.__CORE_DEFENSE__.resetGameForTest());
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().gameSpeed)).toBe(1);
+  await expect(page.locator('.speed-btn.active')).toHaveText('1x');
+});
+
 test('builds walls, places towers on them, and removes towers safely', async ({page}) => {
   await page.goto('./');
   const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
@@ -167,6 +218,22 @@ test('starts with one deterministic tile of each type', async ({page}) => {
     {type: 'tile', key: 'buff', gx: 3, gy: 3}
   ]);
   await expect(page.locator('#nodeCards .tile-card')).toHaveCount(0);
+});
+
+test('shows effect tile details while hovering without a selection panel', async ({page}) => {
+  await page.goto('./');
+  const tile = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(2, 1));
+
+  await page.mouse.move(tile.x, tile.y);
+  await expect(page.locator('#tileTooltip')).toBeVisible();
+  await expect(page.locator('#tileTooltipName')).toHaveText('DRAG FIELD');
+  await expect(page.locator('#tileTooltipDescription')).toHaveText('Slows enemies by 25% while they occupy this cell.');
+
+  await page.mouse.move(0, 0);
+  await expect(page.locator('#tileTooltip')).toBeHidden();
+
+  await page.mouse.click(tile.x, tile.y);
+  await expect(page.locator('#selectedPanel')).toBeHidden();
 });
 
 test('applies the initial damage-over-time tile to enemies on the route', async ({page}) => {
