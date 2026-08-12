@@ -282,3 +282,27 @@ test('shows three reward choices and adds the selected tower to inventory', asyn
   }));
   expect(cardPositions[0]).not.toEqual(cardPositions[1]);
 });
+
+test('applies and preserves a stacked enchantment on a tower', async ({page}) => {
+  await page.goto('./');
+  await page.evaluate(() => window.__CORE_DEFENSE__.grantRewardForTest('enchantment', 'burn'));
+  const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
+  await page.mouse.click(cell.x, cell.y);
+  await page.locator('#nodeCards .node-card[data-type="tower"]').first().click();
+  await page.mouse.click(cell.x, cell.y);
+  await page.evaluate(() => window.__CORE_DEFENSE__.grantRewardForTest('enchantment', 'burn'));
+  await page.locator('#nodeCards .node-card[data-type="enchantment"][data-key="burn"]').first().click();
+  await page.mouse.click(cell.x, cell.y);
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState())).toMatchObject({
+    towerEnchantments: [['burn']]
+  });
+  await page.evaluate(() => window.__CORE_DEFENSE__.grantRewardForTest('enchantment', 'burn'));
+  await page.locator('#nodeCards .node-card[data-type="enchantment"][data-key="burn"]').first().click();
+  await page.mouse.click(cell.x, cell.y);
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().towerEnchantments)).toEqual([['burn', 'burn']]);
+  await page.locator('#purgeBtn').click();
+  await page.locator('#nodeCards .node-card[data-type="tower"][data-key="filter"]').click();
+  await page.mouse.click(cell.x, cell.y);
+  await page.mouse.click(cell.x, cell.y);
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().towerEnchantments)).toEqual([['burn', 'burn']]);
+});
