@@ -35,6 +35,26 @@ test('shows game speed controls with normal speed active', async ({page}) => {
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().gameSpeed)).toBe(1);
 });
 
+test('shows wall mode controls with normal mode active', async ({page}) => {
+  await page.goto('./');
+  await expect(page.locator('.wall-mode-btn')).toHaveText(['Normal', 'Build', 'Remove']);
+  await expect(page.locator('.wall-mode-btn.active')).toHaveText('Normal');
+  await expect(page.locator('.wall-mode-btn[data-wall-mode="normal"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().wallEditMode)).toBe('normal');
+});
+
+test('switches wall modes and resets to normal', async ({page}) => {
+  await page.goto('./');
+  for (const mode of ['build', 'remove', 'normal']) {
+    await page.locator(`.wall-mode-btn[data-wall-mode="${mode}"]`).click();
+    await expect(page.locator('.wall-mode-btn.active')).toHaveText(mode[0].toUpperCase() + mode.slice(1));
+    await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().wallEditMode)).toBe(mode);
+  }
+  await page.locator('[data-wall-mode="build"]').click();
+  await page.evaluate(() => window.__CORE_DEFENSE__.resetGameForTest());
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().wallEditMode)).toBe('normal');
+});
+
 test('switches between all supported game speeds', async ({page}) => {
   await page.goto('./');
   for (const speed of ['0.5', '1', '2']) {
@@ -80,6 +100,7 @@ test('resets game speed and keeps controls usable over the reward overlay', asyn
 
 test('builds walls, places towers on them, and removes towers safely', async ({page}) => {
   await page.goto('./');
+  await page.locator('[data-wall-mode="build"]').click();
   const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
   const secondCell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 2));
   await page.mouse.move(cell.x, cell.y);
@@ -88,6 +109,7 @@ test('builds walls, places towers on them, and removes towers safely', async ({p
   await page.mouse.up();
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState())).toMatchObject({walls: 2});
 
+  await page.locator('[data-wall-mode="normal"]').click();
   await page.locator('#nodeCards .node-card').first().click();
   await expect(page.locator('#nodeCards .node-card').first()).toHaveClass(/active/);
 
@@ -100,26 +122,29 @@ test('builds walls, places towers on them, and removes towers safely', async ({p
   await page.locator('#purgeBtn').click();
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState())).toMatchObject({towers: 0, walls: 2});
   await expect(page.locator('#nodeCards .node-card')).toHaveCount(3);
+  await page.locator('[data-wall-mode="remove"]').click();
   await page.mouse.move(cell.x, cell.y);
   await page.mouse.down({button: 'right'});
   await page.mouse.move(secondCell.x, secondCell.y, {steps: 4});
   await page.mouse.up({button: 'right'});
-  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().walls)).toBe(0);
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().walls)).toBe(2);
 });
 
 test.describe('mobile canvas controls', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-  test('one-finger drags place or clear walls based on the starting cell', async ({page}) => {
+  test('one-finger drags place or clear walls in the selected mode', async ({page}) => {
     await page.goto('./');
     const first = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
     const second = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 2));
 
+    await page.locator('[data-wall-mode="build"]').click();
     await dispatchTouchPointer(page, 'pointerdown', 1, first);
     await dispatchTouchPointer(page, 'pointermove', 1, second);
     await dispatchTouchPointer(page, 'pointerup', 1, second);
     await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().walls)).toBe(2);
 
+    await page.locator('[data-wall-mode="remove"]').click();
     await dispatchTouchPointer(page, 'pointerdown', 1, first);
     await dispatchTouchPointer(page, 'pointermove', 1, second);
     await dispatchTouchPointer(page, 'pointerup', 1, second);
@@ -129,12 +154,24 @@ test.describe('mobile canvas controls', () => {
   test('a touch tap still places the selected tower', async ({page}) => {
     await page.goto('./');
     const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
+    await page.locator('[data-wall-mode="build"]').click();
+    await dispatchTouchPointer(page, 'pointerdown', 1, cell);
+    await dispatchTouchPointer(page, 'pointerup', 1, cell);
+    await page.locator('[data-wall-mode="normal"]').click();
     await page.mouse.click(cell.x, cell.y);
     await page.locator('#nodeCards .node-card').first().click();
 
     await dispatchTouchPointer(page, 'pointerdown', 1, cell);
     await dispatchTouchPointer(page, 'pointerup', 1, cell);
     await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState())).toMatchObject({towers: 1, walls: 1});
+  });
+
+  test('normal touch taps select without editing walls', async ({page}) => {
+    await page.goto('./');
+    const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
+    await dispatchTouchPointer(page, 'pointerdown', 1, cell);
+    await dispatchTouchPointer(page, 'pointerup', 1, cell);
+    await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().walls)).toBe(0);
   });
 
   test('two-finger pan moves the camera without editing cells', async ({page}) => {
@@ -206,7 +243,7 @@ test.describe('mobile canvas controls', () => {
   test('shows the mobile gesture hint', async ({page}) => {
     await page.goto('./');
     await expect(page.locator('#mobileHint')).toBeVisible();
-    await expect(page.locator('#mobileHint')).toHaveText('1-FINGER DRAG: PLACE/CLEAR WALLS · 2-FINGER DRAG: PAN · PINCH: ZOOM');
+    await expect(page.locator('#mobileHint')).toHaveText('NORMAL: TAP TO SELECT · BUILD/REMOVE: 1-FINGER TAP/DRAG · 2-FINGER DRAG: PAN · PINCH: ZOOM');
     await expect(page.locator('#desktopHint')).toBeHidden();
   });
 });
@@ -287,7 +324,9 @@ test('places a rewarded tile and restores the initial layout on reset', async ({
 test('purchases escalating upgrades and preserves them through purge', async ({page}) => {
   await page.goto('./');
   const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
+  await page.locator('[data-wall-mode="build"]').click();
   await page.mouse.click(cell.x, cell.y);
+  await page.locator('[data-wall-mode="normal"]').click();
   await page.locator('#nodeCards .node-card').first().click();
   await page.mouse.click(cell.x, cell.y);
   await page.mouse.click(cell.x, cell.y);
@@ -315,7 +354,9 @@ test('purchases escalating upgrades and preserves them through purge', async ({p
 test('starts a wave after selecting a tower', async ({page}) => {
   await page.goto('./');
   const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
+  await page.locator('[data-wall-mode="build"]').click();
   await page.mouse.click(cell.x, cell.y);
+  await page.locator('[data-wall-mode="normal"]').click();
   await page.locator('#nodeCards .node-card').first().click();
   await page.mouse.move(0, 0);
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().previewVisible)).toBe(false);
@@ -331,6 +372,7 @@ test('starts a wave after selecting a tower', async ({page}) => {
 
 test('updates active enemy routes when a wall is placed', async ({page}) => {
   await page.goto('./');
+  await page.locator('[data-wall-mode="build"]').click();
   await page.locator('#waveBtn').click();
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().enemies)).toBeGreaterThan(0);
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().enemyPositions[0][0])).toBeGreaterThan(-12.5);
@@ -375,7 +417,9 @@ test('applies and preserves a stacked enchantment on a tower', async ({page}) =>
   await page.goto('./');
   await page.evaluate(() => window.__CORE_DEFENSE__.grantRewardForTest('enchantment', 'burn'));
   const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
+  await page.locator('[data-wall-mode="build"]').click();
   await page.mouse.click(cell.x, cell.y);
+  await page.locator('[data-wall-mode="normal"]').click();
   await page.locator('#nodeCards .node-card[data-type="tower"]').first().click();
   await page.mouse.click(cell.x, cell.y);
   await page.evaluate(() => window.__CORE_DEFENSE__.grantRewardForTest('enchantment', 'burn'));
