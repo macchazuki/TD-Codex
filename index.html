@@ -350,6 +350,8 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   // camera orbit
+  const CAMERA_DISTANCE_MIN = 10;
+  const CAMERA_DISTANCE_MAX = 55;
   let camAzimuth = 0.55, camElevation = 0.95, camDistance = 36;
   const camTarget = new THREE.Vector3(0,0,0);
   function updateCamera(){
@@ -1503,7 +1505,7 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
       clampCameraTarget();
     }
     const distance = Math.hypot(first.x - second.x, first.y - second.y);
-    camDistance = THREE.MathUtils.clamp(camDistance - (distance - touchGesture.distance) * 0.04, 10, 40);
+    camDistance = THREE.MathUtils.clamp(camDistance - (distance - touchGesture.distance) * 0.04, CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX);
     touchGesture.midpoint = midpoint;
     touchGesture.distance = distance;
   }
@@ -1670,7 +1672,7 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
 
   canvas.addEventListener('wheel', (e)=>{
     e.preventDefault();
-    camDistance = Math.min(40, Math.max(10, camDistance + e.deltaY*0.02));
+    camDistance = Math.min(CAMERA_DISTANCE_MAX, Math.max(CAMERA_DISTANCE_MIN, camDistance + e.deltaY*0.02));
   }, {passive:false});
 
   window.addEventListener('keydown', (e)=>{
