@@ -6,96 +6,40 @@ import { addRewardToInventory, createRewardPool, drawRewards, removeFromInventor
 import { INITIAL_TILES, SPECIAL_TILE_TYPES, applyDotTick, canPlaceTile, getEffectiveTowerStats, getEnemyTileEffect, getTileAt } from './game/specialTiles.js';
 import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } from './game/upgrades.js';
 import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBounty, tickDotStacks } from './game/enchantments.js';
+import { getGameElements } from './runtime/dom.js';
+import { createScene } from './runtime/scene.js';
+import { createGameState } from './runtime/state.js';
+import { getPointOnRoute as getPointOnRouteFromPath, getRouteMetrics as getRouteMetricsFromPath, gridToWorld as gridToWorldFromPath } from './runtime/path.js';
+import { createCameraController } from './runtime/camera.js';
+import { startGameLoop } from './runtime/loop.js';
 
 (function(){
   "use strict";
 
-  /* ---------------------------------------------------------------------
-     CONFIG
-  --------------------------------------------------------------------- */
-  /* ---------------------------------------------------------------------
-     STATE
-  --------------------------------------------------------------------- */
-  let gold = 150, lives = 20, wave = 0, waveInProgress = false, gameOver = false, awaitingReward = false;
-  let selectedTowerType = null, selectedTileType = null, selectedEnchantmentType = null;
-  let selectedTower = null;
-  let gameSpeed = DEFAULT_GAME_SPEED;
-  let wallEditMode = 'normal';
-  let spawnQueue = [], spawnTimer = 0;
-  let towers = [], enemies = [], projectiles = [], effects = [], pulses = [];
   const rewardPool = createRewardPool(TOWER_TYPES, SPECIAL_TILE_TYPES, ENCHANTMENT_TYPES);
-  let inventory = rewardPool.filter((reward) => reward.type === 'tower').map((reward) => ({...reward}));
-  let tiles = INITIAL_TILES.map((tile) => ({...tile}));
-  let currentRewards = [];
-  let occupiedSet = new Set(), wallSet = new Set(), pathSet = new Set(), pathSetRoute = [];
-  let routeVersion = 0;
-  const startCell = {gx: 0, gy: 1};
-  const endCell = {gx: GRID_W - 1, gy: 6};
+  const state = createGameState({rewardPool, initialTiles: INITIAL_TILES, defaultGameSpeed: DEFAULT_GAME_SPEED, gridWidth: GRID_W, gridHeight: GRID_H});
+  let {gold, lives, wave, waveInProgress, gameOver, awaitingReward, selectedTowerType, selectedTileType, selectedEnchantmentType, selectedTower, gameSpeed, wallEditMode, spawnQueue, spawnTimer, towers, enemies, projectiles, effects, pulses, inventory, tiles, currentRewards, occupiedSet, wallSet, pathSet, pathSetRoute, routeVersion, startCell, endCell, worldWaypoints, segmentLengths: segLengths, pathTotalLength} = state;
   const WALL_TOP = 0.78;
-  let worldWaypoints = [], segLengths = [], pathTotalLength = 0;
-
-  /* ---------------------------------------------------------------------
-     THREE.JS SETUP
-  --------------------------------------------------------------------- */
-  const canvas = document.getElementById('gameCanvas');
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x060a14);
-  // Keep the board readable at the default orbit distance. The board is
-  // intentionally wide, so a dense fog makes its far edge disappear.
-  scene.fog = new THREE.FogExp2(0x060a14, 0.012);
-
-  const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 200);
-  let renderer;
-  try {
-    renderer = new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:'high-performance'});
-  } catch(error) {
-    canvas.dataset.renderStatus = 'error';
-    canvas.setAttribute('aria-label', '3D renderer unavailable');
-    console.error('CORE://DEFENSE could not initialize WebGL.', error);
-    throw error;
-  }
-  canvas.dataset.renderStatus = 'ready';
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  const elements = getGameElements();
+  const {canvas} = elements;
+  const {scene, camera, renderer} = createScene(canvas, GRID_W, GRID_H, CELL);
 
   // camera orbit
-  const CAMERA_DISTANCE_MIN = 10;
-  const CAMERA_DISTANCE_MAX = 55;
-  let camAzimuth = 0.55, camElevation = 0.95, camDistance = 36;
-  const camTarget = new THREE.Vector3(0,0,0);
-  function updateCamera(){
-    camera.position.set(
-      camTarget.x + camDistance*Math.sin(camAzimuth)*Math.cos(camElevation),
-      camTarget.y + camDistance*Math.sin(camElevation),
-      camTarget.z + camDistance*Math.cos(camAzimuth)*Math.cos(camElevation)
-    );
-    camera.lookAt(camTarget);
-  }
+  const cameraController = createCameraController(camera);
+  const {target: camTarget} = cameraController.state;
+  const {minDistance: CAMERA_DISTANCE_MIN, maxDistance: CAMERA_DISTANCE_MAX} = cameraController.limits;
+  let camDistance = cameraController.state.distance;
+  const updateCamera = () => {
+    cameraController.state.distance = camDistance;
+    cameraController.update();
+  };
   updateCamera();
-
-  // lights
-  scene.add(new THREE.AmbientLight(0x223355, 0.75));
-  const sun = new THREE.DirectionalLight(0xaeefff, 1.0);
-  sun.position.set(14, 26, 10);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(1024,1024);
-  sun.shadow.camera.left = -20; sun.shadow.camera.right = 20;
-  sun.shadow.camera.top = 16; sun.shadow.camera.bottom = -16;
-  sun.shadow.camera.near = 1; sun.shadow.camera.far = 60;
-  scene.add(sun);
-
-  // faint grid helper for atmosphere
-  const gridHelper = new THREE.GridHelper(Math.max(GRID_W,GRID_H)*CELL+10, 30, 0x11304a, 0x0c1c30);
-  gridHelper.position.y = -0.35;
-  scene.add(gridHelper);
 
   /* ---------------------------------------------------------------------
      GRID / PATH HELPERS
   --------------------------------------------------------------------- */
   function gridToWorld(gx, gy){
-    return new THREE.Vector3((gx-(GRID_W-1)/2)*CELL, 0, (gy-(GRID_H-1)/2)*CELL);
+    return gridToWorldFromPath(gx, gy, GRID_W, GRID_H, CELL);
   }
 
   function buildPathMath(){
@@ -128,27 +72,11 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
   }
 
   function getPointOnRoute(route, lengths, totalLength, dist){
-    dist = Math.max(0, Math.min(dist, totalLength));
-    let acc = 0;
-    for(let i = 0; i < lengths.length; i += 1){
-      if(dist <= acc + lengths[i] || i === lengths.length - 1){
-        const ratio = lengths[i] > 0 ? Math.min(Math.max((dist - acc) / lengths[i], 0), 1) : 0;
-        return new THREE.Vector3().lerpVectors(route[i], route[i + 1], ratio);
-      }
-      acc += lengths[i];
-    }
-    return route[route.length - 1].clone();
+    return getPointOnRouteFromPath(route, lengths, totalLength, dist);
   }
 
   function getRouteMetrics(route){
-    const lengths = [];
-    let total = 0;
-    for(let index = 0; index < route.length - 1; index += 1){
-      const length = route[index].distanceTo(route[index + 1]);
-      lengths.push(length);
-      total += length;
-    }
-    return {lengths, total};
+    return getRouteMetricsFromPath(route);
   }
 
   function getGridCellFromWorld(position){
@@ -719,31 +647,14 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
   /* ---------------------------------------------------------------------
      UI WIRING
   --------------------------------------------------------------------- */
-  const goldValEl = document.getElementById('goldVal');
-  const livesValEl = document.getElementById('livesVal');
-  const waveValEl = document.getElementById('waveVal');
-  const waveBtn = document.getElementById('waveBtn');
-  const speedButtons = [...document.querySelectorAll('.speed-btn')];
-  const wallModeButtons = [...document.querySelectorAll('.wall-mode-btn')];
-  const nodeCardsEl = document.getElementById('nodeCards');
-  const selectedPanel = document.getElementById('selectedPanel');
-  const towerDetails = document.getElementById('towerDetails');
-  const tileTooltip = document.getElementById('tileTooltip');
-  const tileTooltipName = document.getElementById('tileTooltipName');
-  const tileTooltipDescription = document.getElementById('tileTooltipDescription');
-  const messageEl = document.getElementById('message');
-  const rewardOverlay = document.getElementById('rewardOverlay');
-  const rewardCardsEl = document.getElementById('rewardCards');
-  const overlay = document.getElementById('overlay');
-  const overlayTitle = document.getElementById('overlayTitle');
-  const overlaySubtitle = document.getElementById('overlaySubtitle');
-  const upgradeButtons = Object.fromEntries(Object.keys(UPGRADE_STATS).map((stat) => [
-    stat,
-    {
-      button: document.querySelector(`[data-stat="${stat}"]`),
-      cost: document.getElementById(`${stat}UpgradeCost`)
-    }
-  ]));
+  const {
+    goldVal: goldValEl, livesVal: livesValEl, waveVal: waveValEl, waveBtn,
+    speedButtons, wallModeButtons, nodeCards: nodeCardsEl, selectedPanel,
+    towerDetails, tileTooltip, tileTooltipName, tileTooltipDescription,
+    message: messageEl, rewardOverlay, rewardCards: rewardCardsEl, overlay,
+    overlayTitle, overlaySubtitle, selName, selDmg, selRange, selRate,
+    selKills, selEnchantments, purgeBtn, upgradeButtons
+  } = elements;
 
   function updateGoldUI(){ goldValEl.textContent = Math.floor(gold); refreshNodeCards(); refreshSelectedTowerUI(); }
   function updateLivesUI(){ livesValEl.textContent = Math.max(0,Math.floor(lives)); }
@@ -898,14 +809,6 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
       showMessage(`${reward.name.toUpperCase()} ADDED TO INVENTORY`);
     }
   }
-
-  const selName = document.getElementById('selName');
-  const selDmg = document.getElementById('selDmg');
-  const selRange = document.getElementById('selRange');
-  const selRate = document.getElementById('selRate');
-  const selKills = document.getElementById('selKills');
-  const selEnchantments = document.getElementById('selEnchantments');
-  const purgeBtn = document.getElementById('purgeBtn');
 
   function selectTower(tower){
     deselectTower();
@@ -1513,32 +1416,13 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
     }
   };
 
-  /* ---------------------------------------------------------------------
-     MAIN LOOP
-  --------------------------------------------------------------------- */
-  const clock = new THREE.Clock();
-  let elapsed = 0;
-  function animate(){
-    requestAnimationFrame(animate);
-    const realDt = Math.min(clock.getDelta(), 0.05);
-    const dt = scaleDelta(realDt, gameSpeed);
-    elapsed += dt;
-
-    if(!gameOver){
-      if(waveInProgress) updateSpawning(dt);
-      updateEnemies(dt, elapsed);
-      updateTowers(dt);
-      updateProjectiles(dt);
-    }
-    updateEffects(dt);
-    updatePulses(dt, elapsed);
-    coreGroup.rotation.y += dt*0.5;
-    coreMesh.scale.setScalar(1 + Math.sin(elapsed*2.4)*0.06);
-    portal.rotation.z += dt*0.8;
-    updateCamera();
-    renderer.render(scene, camera);
-  }
-
   updateGoldUI(); updateLivesUI(); updateWaveUI();
-  animate();
+  let elapsed = 0;
+  startGameLoop({
+    gameSpeed: () => gameSpeed,
+    renderer, camera, scene, coreGroup, coreMesh, portal, updateCamera,
+    updateSpawning, updateEnemies, updateTowers, updateProjectiles, updateEffects,
+    updatePulses, isGameOver: () => gameOver, isWaveInProgress: () => waveInProgress,
+    onElapsed: (value) => { elapsed = value; }
+  });
 })();

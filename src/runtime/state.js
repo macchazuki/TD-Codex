@@ -1,0 +1,38 @@
+/** Creates the mutable runtime state shared by the game sections. */
+export function createGameState({rewardPool, initialTiles, defaultGameSpeed, gridWidth, gridHeight}) {
+  return {
+    gold: 150,
+    lives: 20,
+    wave: 0,
+    waveInProgress: false,
+    gameOver: false,
+    awaitingReward: false,
+    selectedTowerType: null,
+    selectedTileType: null,
+    selectedEnchantmentType: null,
+    selectedTower: null,
+    gameSpeed: defaultGameSpeed,
+    wallEditMode: 'normal',
+    spawnQueue: [],
+    spawnTimer: 0,
+    towers: [],
+    enemies: [],
+    projectiles: [],
+    effects: [],
+    pulses: [],
+    rewardPool,
+    inventory: rewardPool.filter((reward) => reward.type === 'tower').map((reward) => ({...reward})),
+    tiles: initialTiles.map((tile) => ({...tile})),
+    currentRewards: [],
+    occupiedSet: new Set(),
+    wallSet: new Set(),
+    pathSet: new Set(),
+    pathSetRoute: [],
+    routeVersion: 0,
+    startCell: {gx: 0, gy: 1},
+    endCell: {gx: gridWidth - 1, gy: gridHeight - 2},
+    worldWaypoints: [],
+    segmentLengths: [],
+    pathTotalLength: 0
+  };
+}
