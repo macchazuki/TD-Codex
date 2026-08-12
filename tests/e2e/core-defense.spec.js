@@ -170,6 +170,24 @@ test.describe('mobile canvas controls', () => {
     await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().cameraDistance)).toBe(10);
   });
 
+  test('pinch zoom can zoom out farther on mobile', async ({page}) => {
+    await page.goto('./');
+    const center = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(4, 4));
+    const startLeft = {x: center.x - 520, y: center.y};
+    const startRight = {x: center.x + 520, y: center.y};
+
+    await dispatchTouchPointer(page, 'pointerdown', 1, startLeft);
+    await dispatchTouchPointer(page, 'pointerdown', 2, startRight);
+    for (const offset of [420, 300, 200, 120, 60, 12, 0]) {
+      await dispatchTouchPointer(page, 'pointermove', 1, {x: center.x - offset, y: center.y});
+      await dispatchTouchPointer(page, 'pointermove', 2, {x: center.x + offset, y: center.y});
+    }
+    await dispatchTouchPointer(page, 'pointerup', 1, {x: center.x, y: center.y});
+    await dispatchTouchPointer(page, 'pointerup', 2, {x: center.x, y: center.y});
+
+    await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().cameraDistance)).toBe(55);
+  });
+
   test('continues pinch zoom when one finger is replaced', async ({page}) => {
     await page.goto('./');
     const center = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(4, 4));
