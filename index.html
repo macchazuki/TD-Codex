@@ -1483,6 +1483,11 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
     resetWallEditing();
   }
 
+  function resetTouchGestureBaseline(){
+    touchGesture.midpoint = null;
+    touchGesture.distance = 0;
+  }
+
   function resetMousePanning(){
     mousePanPoint = null;
   }
@@ -1500,6 +1505,7 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
 
   function handleTouchPointerDown(e){
     e.preventDefault();
+    if(e.isTrusted) canvas.setPointerCapture?.(e.pointerId);
     activeTouchPointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
     if(activeTouchPointers.size === 1){
       const cell = getCellAtPointer(e);
@@ -1542,7 +1548,13 @@ import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBou
       if(cell) editWallCell(cell.gx, cell.gy, wallEditAction);
     }
     activeTouchPointers.delete(e.pointerId);
-    resetTouchGesture();
+    if(e.isTrusted && canvas.hasPointerCapture?.(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+    if(activeTouchPointers.size >= 2){
+      initializeTouchGesture();
+      return;
+    }
+    resetTouchGestureBaseline();
+    if(activeTouchPointers.size === 0) resetWallEditing();
   }
 
   canvas.addEventListener('pointerdown', (e)=>{
