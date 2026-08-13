@@ -23,6 +23,18 @@ import { startGameLoop } from './runtime/loop.js';
   const elements = getGameElements();
   const {canvas, mainMenu, startGameBtn} = elements;
   let gameStarted = false;
+  let gameInitialized = false;
+
+  function startGame(){
+    if(gameInitialized) return;
+    gameInitialized = true;
+    gameStarted = true;
+    mainMenu.classList.add('hidden');
+    canvas.classList.remove('hidden');
+    initializeGame();
+  }
+
+  function initializeGame(){
   const {scene, camera, renderer} = createScene(canvas, GRID_W, GRID_H, CELL);
 
   // camera orbit
@@ -1350,14 +1362,6 @@ import { startGameLoop } from './runtime/loop.js';
     overlay.classList.add('hidden');
   }
 
-  function startGame(){
-    gameStarted = true;
-    mainMenu.classList.add('hidden');
-    canvas.classList.remove('hidden');
-  }
-
-  startGameBtn.addEventListener('click', startGame);
-
   // Lightweight inspection surface for browser tests and deployment
   // diagnostics. It exposes state only; gameplay still goes through the
   // same input handlers and rules as a normal player session.
@@ -1435,4 +1439,17 @@ import { startGameLoop } from './runtime/loop.js';
     updatePulses, isGameOver: () => gameOver, isWaveInProgress: () => waveInProgress,
     onElapsed: (value) => { elapsed = value; }
   });
+  }
+
+  window.__CORE_DEFENSE__ = {
+    getSceneState(){
+      return {
+        scene: gameStarted ? 'tower-defence-map' : 'main-menu',
+        renderStatus: canvas.dataset.renderStatus || 'unknown',
+        renderCalls: 0,
+        mapCells: 0
+      };
+    }
+  };
+  startGameBtn.addEventListener('click', startGame);
 })();
