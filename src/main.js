@@ -1064,8 +1064,8 @@ import { createSelectionElements } from './runtime/dom.js';
     ring.position.z = tower.group.position.z;
     scene.add(ring);
     tower.rangeRing = ring;
-    refreshSelectedTowerUI();
     selectedPanel.classList.remove('hidden');
+    refreshSelectedTowerUI();
   }
   function refreshSelectedTowerUI(){
     if(!selectedTower) return;
