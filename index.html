@@ -23,6 +23,24 @@
   #app{position:relative; width:100vw; height:100vh;}
   canvas{display:block; width:100%; height:100%; touch-action:none;}
 
+  #mainMenu{
+    position:absolute; inset:0; z-index:40; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 50% 42%, rgba(0,229,255,0.12), transparent 35%), rgba(4,6,12,0.78);
+    backdrop-filter:blur(8px);
+  }
+  #mainMenu.hidden{display:none;}
+  #mainMenuBox{width:min(460px, calc(100vw - 32px)); padding:48px 42px; text-align:center;}
+  #mainMenuTitle{font-family:'Orbitron',sans-serif; font-size:clamp(28px, 7vw, 48px); font-weight:900; letter-spacing:4px; color:var(--cyan); text-shadow:0 0 18px rgba(0,229,255,0.55);}
+  #mainMenuSubtitle{margin:12px 0 32px; color:var(--text-dim); font-size:11px; letter-spacing:1px;}
+  .menu-btn{
+    display:block; width:100%; margin-top:10px; padding:14px 18px; font-family:'Orbitron',sans-serif; font-weight:700;
+    letter-spacing:1.5px; font-size:12px; color:var(--cyan); background:rgba(0,229,255,0.08);
+    border:1px solid var(--cyan); cursor:pointer; transition:all .15s ease;
+  }
+  .menu-btn:hover{background:rgba(0,229,255,0.22); box-shadow:0 0 18px rgba(0,229,255,0.3);}
+  .menu-btn.secondary{color:var(--text-dim); border-color:var(--panel-border); background:rgba(10,16,30,0.5);}
+  .menu-btn.secondary:hover{color:var(--text); border-color:var(--text-dim); box-shadow:none;}
+
   .brackets{
     position:relative;
   }
@@ -219,6 +237,14 @@
 <body>
 <div id="app">
   <canvas id="gameCanvas"></canvas>
+  <div id="mainMenu" aria-labelledby="mainMenuTitle">
+    <div id="mainMenuBox" class="brackets">
+      <div id="mainMenuTitle">CORE://DEFENSE</div>
+      <div id="mainMenuSubtitle">SECURE THE SECTOR. HOLD THE LINE.</div>
+      <button id="startGameBtn" class="menu-btn" type="button">START GAME</button>
+      <button id="settingsBtn" class="menu-btn secondary" type="button">SETTINGS</button>
+    </div>
+  </div>
   <div id="tileTooltip" class="hidden" role="status" aria-live="polite">
     <h3 id="tileTooltipName"></h3>
     <p id="tileTooltipDescription"></p>

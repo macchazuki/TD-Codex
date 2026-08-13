@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
 
+async function gotoGame(page) {
+  await page.goto('./');
+  await page.locator('#startGameBtn').click();
+}
+
 async function dispatchTouchPointer(page, type, pointerId, point) {
   await page.locator('#gameCanvas').dispatchEvent(type, {
     pointerId,
@@ -12,8 +17,16 @@ async function dispatchTouchPointer(page, type, pointerId, point) {
   });
 }
 
-test('loads the game and exposes the initial HUD', async ({page}) => {
+test('shows the main menu and starts the tower defence map', async ({page}) => {
   await page.goto('./');
+  await expect(page.locator('#mainMenu')).toBeVisible();
+  await expect(page.locator('#startGameBtn')).toHaveText('START GAME');
+  await expect(page.locator('#settingsBtn')).toHaveText('SETTINGS');
+  await page.locator('#settingsBtn').click();
+  await expect(page.locator('#mainMenu')).toBeVisible();
+  await page.locator('#startGameBtn').click();
+  await expect(page.locator('#mainMenu')).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().scene)).toBe('tower-defence-map');
   await expect(page.locator('.brand')).toHaveText('CORE://DEFENSE');
   await expect(page.locator('.stat.gold label')).toHaveText('GOLD');
   await expect(page.locator('#goldVal')).toHaveText('150');
@@ -28,7 +41,7 @@ test('loads the game and exposes the initial HUD', async ({page}) => {
 });
 
 test('shows game speed controls with normal speed active', async ({page}) => {
-  await page.goto('./');
+  await gotoGame(page);
   await expect(page.locator('.speed-btn')).toHaveCount(3);
   await expect(page.locator('.speed-btn.active')).toHaveText('1x');
   await expect(page.locator('.speed-btn[data-speed="1"]')).toHaveAttribute('aria-pressed', 'true');
@@ -36,7 +49,7 @@ test('shows game speed controls with normal speed active', async ({page}) => {
 });
 
 test('shows wall mode controls with normal mode active', async ({page}) => {
-  await page.goto('./');
+  await gotoGame(page);
   await expect(page.locator('.wall-mode-btn')).toHaveText(['Normal', 'Build', 'Remove']);
   await expect(page.locator('.wall-mode-btn.active')).toHaveText('Normal');
   await expect(page.locator('.wall-mode-btn[data-wall-mode="normal"]')).toHaveAttribute('aria-pressed', 'true');
@@ -44,7 +57,7 @@ test('shows wall mode controls with normal mode active', async ({page}) => {
 });
 
 test('switches wall modes and resets to normal', async ({page}) => {
-  await page.goto('./');
+  await gotoGame(page);
   for (const mode of ['build', 'remove', 'normal']) {
     await page.locator(`.wall-mode-btn[data-wall-mode="${mode}"]`).click();
     await expect(page.locator('.wall-mode-btn.active')).toHaveText(mode[0].toUpperCase() + mode.slice(1));
@@ -56,7 +69,7 @@ test('switches wall modes and resets to normal', async ({page}) => {
 });
 
 test('switches between all supported game speeds', async ({page}) => {
-  await page.goto('./');
+  await gotoGame(page);
   for (const speed of ['0.5', '1', '2']) {
     await page.locator(`.speed-btn[data-speed="${speed}"]`).click();
     await expect(page.locator('.speed-btn.active')).toHaveText(`${speed}x`);
@@ -65,7 +78,7 @@ test('switches between all supported game speeds', async ({page}) => {
 });
 
 test('scales simulation elapsed time with game speed', async ({page}) => {
-  await page.goto('./');
+  await gotoGame(page);
   await page.evaluate(() => window.__CORE_DEFENSE__.setGameSpeedForTest(0.5));
   const slowStart = await page.evaluate(() => ({
     realTime: performance.now(),
@@ -86,7 +99,7 @@ test('scales simulation elapsed time with game speed', async ({page}) => {
 });
 
 test('resets game speed and keeps controls usable over the reward overlay', async ({page}) => {
-  await page.goto('./');
+  await gotoGame(page);
   await page.locator('.speed-btn[data-speed="2"]').click();
   await page.evaluate(() => window.__CORE_DEFENSE__.showWaveRewardForTest());
   await expect(page.locator('#rewardOverlay')).toBeVisible();
@@ -99,7 +112,7 @@ test('resets game speed and keeps controls usable over the reward overlay', asyn
 });
 
 test('builds walls, places towers on them, and removes towers safely', async ({page}) => {
-  await page.goto('./');
+  await gotoGame(page);
   await page.locator('[data-wall-mode="build"]').click();
   const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
   const secondCell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 2));
@@ -134,7 +147,7 @@ test.describe('mobile canvas controls', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
   test('one-finger drags place or clear walls in the selected mode', async ({page}) => {
-    await page.goto('./');
+    await gotoGame(page);
     const first = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
     const second = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 2));
 
@@ -152,7 +165,7 @@ test.describe('mobile canvas controls', () => {
   });
 
   test('a touch tap still places the selected tower', async ({page}) => {
-    await page.goto('./');
+    await gotoGame(page);
     const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
     await page.locator('[data-wall-mode="build"]').click();
     await dispatchTouchPointer(page, 'pointerdown', 1, cell);
@@ -167,7 +180,7 @@ test.describe('mobile canvas controls', () => {
   });
 
   test('normal touch taps select without editing walls', async ({page}) => {
-    await page.goto('./');
+    await gotoGame(page);
     const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
     await dispatchTouchPointer(page, 'pointerdown', 1, cell);
     await dispatchTouchPointer(page, 'pointerup', 1, cell);
@@ -175,7 +188,7 @@ test.describe('mobile canvas controls', () => {
   });
 
   test('two-finger pan moves the camera without editing cells', async ({page}) => {
-    await page.goto('./');
+    await gotoGame(page);
     const first = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(3, 1));
     const second = {x: first.x + 80, y: first.y + 20};
     const before = await page.evaluate(() => window.__CORE_DEFENSE__.getSceneState());
@@ -192,7 +205,7 @@ test.describe('mobile canvas controls', () => {
   });
 
   test('pinch zoom changes camera distance within its bounds', async ({page}) => {
-    await page.goto('./');
+    await gotoGame(page);
     const center = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(4, 4));
     const left = {x: center.x - 40, y: center.y};
     const right = {x: center.x + 40, y: center.y};
@@ -208,7 +221,7 @@ test.describe('mobile canvas controls', () => {
   });
 
   test('pinch zoom can zoom out farther on mobile', async ({page}) => {
-    await page.goto('./');
+    await gotoGame(page);
     const center = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(4, 4));
     const startLeft = {x: center.x - 520, y: center.y};
     const startRight = {x: center.x + 520, y: center.y};
@@ -226,7 +239,7 @@ test.describe('mobile canvas controls', () => {
   });
 
   test('continues pinch zoom when one finger is replaced', async ({page}) => {
-    await page.goto('./');
+    await gotoGame(page);
     const center = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(4, 4));
     const first = {x: center.x - 40, y: center.y};
     const second = {x: center.x + 40, y: center.y};
@@ -247,7 +260,7 @@ test.describe('mobile canvas controls', () => {
   });
 
   test('gesture cancellation and transitions clear wall editing', async ({page}) => {
-    await page.goto('./');
+    await gotoGame(page);
     const first = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
     const second = {x: first.x + 80, y: first.y + 20};
 
@@ -259,7 +272,7 @@ test.describe('mobile canvas controls', () => {
   });
 
   test('shows the mobile gesture hint', async ({page}) => {
-    await page.goto('./');
+    await gotoGame(page);
     await expect(page.locator('#mobileHint')).toBeVisible();
     await expect(page.locator('#mobileHint')).toHaveText('NORMAL: TAP TO SELECT · BUILD/REMOVE: 1-FINGER TAP/DRAG · 2-FINGER DRAG: PAN · PINCH: ZOOM');
     await expect(page.locator('#desktopHint')).toBeHidden();
@@ -267,13 +280,13 @@ test.describe('mobile canvas controls', () => {
 });
 
 test('shows the desktop control hint', async ({page}) => {
-  await page.goto('./');
+  await gotoGame(page);
   await expect(page.locator('#desktopHint')).toBeVisible();
   await expect(page.locator('#mobileHint')).toBeHidden();
 });
 
 test('pans the camera with a middle-button drag', async ({page}) => {
-  await page.goto('./');
+  await gotoGame(page);
   const start = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(4, 3));
   const before = await page.evaluate(() => window.__CORE_DEFENSE__.getSceneState());
 
@@ -287,7 +300,7 @@ test('pans the camera with a middle-button drag', async ({page}) => {
 });
 
 test('starts with one deterministic tile of each type', async ({page}) => {
-  await page.goto('./');
+  await gotoGame(page);
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().tiles)).toEqual([
     {type: 'tile', key: 'slow', gx: 2, gy: 1},
     {type: 'tile', key: 'dot', gx: 0, gy: 1},
@@ -297,7 +310,7 @@ test('starts with one deterministic tile of each type', async ({page}) => {
 });
 
 test('shows effect tile details while hovering without a selection panel', async ({page}) => {
-  await page.goto('./');
+  await gotoGame(page);
   const tile = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(2, 1));
 
   await page.mouse.move(tile.x, tile.y);
@@ -313,7 +326,7 @@ test('shows effect tile details while hovering without a selection panel', async
 });
 
 test('applies the initial damage-over-time tile to enemies on the route', async ({page}) => {
-  await page.goto('./');
+  await gotoGame(page);
   await page.locator('#waveBtn').click();
 
   await expect.poll(
@@ -323,7 +336,7 @@ test('applies the initial damage-over-time tile to enemies on the route', async 
 });
 
 test('places a rewarded tile and restores the initial layout on reset', async ({page}) => {
-  await page.goto('./');
+  await gotoGame(page);
   await page.evaluate(() => window.__CORE_DEFENSE__.grantRewardForTest('tile', 'dot'));
   await page.locator('#nodeCards .tile-card[data-key="dot"]').last().click();
   const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(8, 0));
@@ -340,7 +353,7 @@ test('places a rewarded tile and restores the initial layout on reset', async ({
 });
 
 test('purchases escalating upgrades and preserves them through purge', async ({page}) => {
-  await page.goto('./');
+  await gotoGame(page);
   const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
   await page.locator('[data-wall-mode="build"]').click();
   await page.mouse.click(cell.x, cell.y);
@@ -370,7 +383,7 @@ test('purchases escalating upgrades and preserves them through purge', async ({p
 });
 
 test('starts a wave after selecting a tower', async ({page}) => {
-  await page.goto('./');
+  await gotoGame(page);
   const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
   await page.locator('[data-wall-mode="build"]').click();
   await page.mouse.click(cell.x, cell.y);
@@ -389,7 +402,7 @@ test('starts a wave after selecting a tower', async ({page}) => {
 });
 
 test('updates active enemy routes when a wall is placed', async ({page}) => {
-  await page.goto('./');
+  await gotoGame(page);
   await page.locator('[data-wall-mode="build"]').click();
   await page.locator('#waveBtn').click();
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().enemies)).toBeGreaterThan(0);
@@ -409,7 +422,7 @@ test('updates active enemy routes when a wall is placed', async ({page}) => {
 });
 
 test('shows three reward choices and adds the selected tower to inventory', async ({page}) => {
-  await page.goto('./');
+  await gotoGame(page);
   await page.evaluate(() => window.__CORE_DEFENSE__.showWaveRewardForTest());
 
   await expect(page.locator('#rewardOverlay')).toBeVisible();
@@ -432,7 +445,7 @@ test('shows three reward choices and adds the selected tower to inventory', asyn
 });
 
 test('applies and preserves a stacked enchantment on a tower', async ({page}) => {
-  await page.goto('./');
+  await gotoGame(page);
   await page.evaluate(() => window.__CORE_DEFENSE__.grantRewardForTest('enchantment', 'burn'));
   const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
   await page.locator('[data-wall-mode="build"]').click();

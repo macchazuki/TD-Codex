@@ -21,7 +21,8 @@ import { startGameLoop } from './runtime/loop.js';
   let {gold, lives, wave, waveInProgress, gameOver, awaitingReward, selectedTowerType, selectedTileType, selectedEnchantmentType, selectedTower, gameSpeed, wallEditMode, spawnQueue, spawnTimer, towers, enemies, projectiles, effects, pulses, inventory, tiles, currentRewards, occupiedSet, wallSet, pathSet, pathSetRoute, routeVersion, startCell, endCell, worldWaypoints, segmentLengths: segLengths, pathTotalLength} = state;
   const WALL_TOP = 0.78;
   const elements = getGameElements();
-  const {canvas} = elements;
+  const {canvas, mainMenu, startGameBtn} = elements;
+  let gameStarted = false;
   const {scene, camera, renderer} = createScene(canvas, GRID_W, GRID_H, CELL);
 
   // camera orbit
@@ -1349,12 +1350,20 @@ import { startGameLoop } from './runtime/loop.js';
     overlay.classList.add('hidden');
   }
 
+  function startGame(){
+    gameStarted = true;
+    mainMenu.classList.add('hidden');
+  }
+
+  startGameBtn.addEventListener('click', startGame);
+
   // Lightweight inspection surface for browser tests and deployment
   // diagnostics. It exposes state only; gameplay still goes through the
   // same input handlers and rules as a normal player session.
   window.__CORE_DEFENSE__ = {
     getSceneState(){
       return {
+        scene: gameStarted ? 'tower-defence-map' : 'main-menu',
         renderStatus: canvas.dataset.renderStatus || 'unknown',
         renderCalls: renderer.info.render.calls,
         gold: Math.floor(gold),

@@ -9,6 +9,9 @@ export function getGameElements() {
   ]));
   return {
     canvas: document.getElementById('gameCanvas'),
+    mainMenu: document.getElementById('mainMenu'),
+    startGameBtn: document.getElementById('startGameBtn'),
+    settingsBtn: document.getElementById('settingsBtn'),
     goldVal: document.getElementById('goldVal'),
     livesVal: document.getElementById('livesVal'),
     waveVal: document.getElementById('waveVal'),
