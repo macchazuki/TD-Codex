@@ -546,6 +546,11 @@ import { createSelectionElements } from './runtime/dom.js';
   scene.add(projGroup);
 
   function fireProjectile(tower){
+    if (tower.key === 'lightning') {
+      const targets = buildLightningTargets(tower, 3, false);
+      if (targets.length) fireLightningProjectile(tower, targets, tower.damage);
+      return;
+    }
     const cfg = tower.cfg;
     const mat = new THREE.MeshStandardMaterial({color:cfg.color, emissive:cfg.color, emissiveIntensity:2.0});
     const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8), mat);
@@ -629,15 +634,8 @@ import { createSelectionElements } from './runtime/dom.js';
     if (tower.key === 'fireball' && tower.target?.alive) {
       fireSkillProjectile(tower, tower.target, cfg.skill.damage, cfg.skill.splash, cfg.skill);
     } else if (tower.key === 'lightning') {
-      const hits = [];
-      let origin = tower.group.position;
-      for (let index = 0; index < cfg.skill.hits; index += 1) {
-        const targets = selectChainTargets({origin, enemies, range: index === 0 ? tower.range : getChainRange(tower.range), limit: 1, visited: new Set(hits), allowVisited: index >= enemies.filter((enemy) => enemy.alive).length, distance: distXZ});
-        if (!targets.length) break;
-        hits.push(targets[0]);
-        damageEnemy(targets[0], tower.damage, tower);
-        origin = targets[0].mesh.position;
-      }
+      const targets = buildLightningTargets(tower, cfg.skill.hits, true);
+      if (targets.length) fireLightningProjectile(tower, targets, tower.damage);
     } else if (tower.key === 'frost') {
       enemies.forEach((enemy) => {
         if (enemy.alive && distXZ(tower.group.position, enemy.mesh.position) <= cfg.skill.radius) applySlow(enemy, cfg.skill.slowAmount, cfg.skill.duration);
@@ -741,9 +739,16 @@ import { createSelectionElements } from './runtime/dom.js';
         damageEnemy(proj.target, proj.damage, proj.sourceTower);
         applyHitEnchantments({tower: proj.sourceTower, damage: proj.damage, enemy: proj.target});
         if (proj.sourceTower.key === 'frost') applySlow(proj.target, proj.sourceTower.cfg.slow.amount, proj.sourceTower.cfg.slow.duration);
-        if (proj.sourceTower.key === 'lightning') {
-          selectChainTargets({origin: proj.target.mesh.position, enemies, range: getChainRange(proj.sourceTower.range), limit: 2, visited: new Set([proj.target]), distance: distXZ})
-            .forEach((enemy) => damageEnemy(enemy, proj.damage * 0.7, proj.sourceTower));
+        if (proj.lightning && proj.chainIndex < proj.chainTargets.length - 1) {
+          const nextTarget = proj.chainTargets[proj.chainIndex + 1];
+          if (nextTarget?.alive) {
+            spawnLightningArc(proj.target.mesh.position, nextTarget.mesh.position, proj.sourceTower.cfg.color);
+            proj.chainIndex += 1;
+            proj.target = nextTarget;
+            proj.mesh.position.set(nextTarget.mesh.position.x, 0.7, nextTarget.mesh.position.z);
+            remaining.push(proj);
+            continue;
+          }
         }
         if (proj.burn) applyBurn(proj.target, proj.burn.burnDamage, proj.burn.burnDuration);
         if(proj.splash > 0){
@@ -813,6 +818,43 @@ import { createSelectionElements } from './runtime/dom.js';
       towerSkillControls.appendChild(control);
       tower.skillLabel = control;
     });
+  }
+
+  function buildLightningTargets(tower, limit, allowRevisits) {
+    const targets = [];
+    let origin = tower.group.position;
+    for (let index = 0; index < limit; index += 1) {
+      const candidates = selectChainTargets({origin, enemies, range: index === 0 ? tower.range : getChainRange(tower.range), limit: 1, visited: new Set(targets), allowVisited: allowRevisits && index >= enemies.filter((enemy) => enemy.alive).length, distance: distXZ});
+      if (!candidates.length) break;
+      targets.push(candidates[0]);
+      origin = candidates[0].mesh.position;
+    }
+    return targets;
+  }
+
+  function fireLightningProjectile(tower, targets, damage) {
+    const mat = new THREE.MeshStandardMaterial({color: tower.cfg.color, emissive: tower.cfg.color, emissiveIntensity: 2.8});
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), mat);
+    mesh.position.set(tower.group.position.x, 0.85, tower.group.position.z);
+    projGroup.add(mesh);
+    projectiles.push({mesh, target: targets[0], chainTargets: targets, chainIndex: 0, damage, speed: 24, sourceTower: tower, lightning: true});
+  }
+
+  function spawnLightningArc(from, to, color) {
+    const start = new THREE.Vector3(from.x, 0.7, from.z);
+    const end = new THREE.Vector3(to.x, 0.7, to.z);
+    const direction = new THREE.Vector3().subVectors(end, start);
+    const perpendicular = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
+    const points = [start];
+    for (let index = 1; index < 4; index += 1) {
+      const point = start.clone().lerp(end, index / 4);
+      point.addScaledVector(perpendicular, (index % 2 ? 0.16 : -0.16));
+      points.push(point);
+    }
+    points.push(end);
+    const mesh = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({color, transparent: true, opacity: 1}));
+    scene.add(mesh);
+    effects.push({mesh, life: 0.18, maxLife: 0.18});
   }
 
   function updateGoldUI(){ goldValEl.textContent = Math.floor(gold); refreshNodeCards(); refreshSelectedTowerUI(); }
