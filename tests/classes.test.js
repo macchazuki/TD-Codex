@@ -1,9 +1,16 @@
 import {describe, expect, it} from 'vitest';
-import {ENGINEER_PERKS, GAME_CLASSES, MAX_SELECTED_PERKS, togglePerk, validateSelection} from '../src/game/classes.js';
+import {ENGINEER_PERKS, GAME_CLASSES, MAGE_PERKS, MAX_SELECTED_PERKS, getStartingTowerKeys, togglePerk, validateSelection} from '../src/game/classes.js';
 
 describe('class and perk selection', () => {
-  it('exposes only The Engineer', () => {
-    expect(GAME_CLASSES.map(({name}) => name)).toEqual(['The Engineer']);
+  it('exposes Engineer and Mage', () => {
+    expect(GAME_CLASSES.map(({name}) => name)).toEqual(['The Engineer', 'The Mage']);
+  });
+
+  it('provides Mage perks and class-specific starting towers', () => {
+    expect(MAGE_PERKS.map(({key}) => key)).toEqual(['arcane-focus', 'elemental-mastery']);
+    expect(getStartingTowerKeys('engineer')).toEqual(['filter', 'purge', 'daemon']);
+    expect(getStartingTowerKeys('mage')).toEqual(['fireball', 'lightning', 'frost']);
+    expect(validateSelection({classKey: 'mage', perkKeys: ['arcane-focus', 'elemental-mastery']})).toEqual({ok: true});
   });
 
   it('exposes two initially unselected perks', () => {

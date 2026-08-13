@@ -6,7 +6,10 @@ export const MAX_WAVE = 10;
 export const TOWER_TYPES = {
   filter: {key: 'filter', name: 'Packet Filter', damage: 8, range: 4.2, fireRate: 2.5, splash: 0, color: 0x00e5ff, shape: 'diamond', desc: 'Fast, low-yield suppression node.'},
   purge: {key: 'purge', name: 'Purge Cannon', damage: 24, range: 3.6, fireRate: 0.9, splash: 1.5, color: 0xff9500, shape: 'circle', desc: 'Blast radius vs clustered intrusions.'},
-  daemon: {key: 'daemon', name: 'Snipe Daemon', damage: 60, range: 7.2, fireRate: 0.55, splash: 0, color: 0xd926ff, shape: 'triangle', desc: 'Long-range precision strike node.'}
+  daemon: {key: 'daemon', name: 'Snipe Daemon', damage: 60, range: 7.2, fireRate: 0.55, splash: 0, color: 0xd926ff, shape: 'triangle', desc: 'Long-range precision strike node.'},
+  fireball: {key: 'fireball', name: 'Fireball', damage: 12, range: 5.4, fireRate: 1.15, splash: 0, color: 0xff6b35, shape: 'star', desc: 'Elemental projectile with a burning skill.', skill: {cooldown: 8, damage: 18, splash: 1.6, burnDamage: 4, burnDuration: 3}},
+  lightning: {key: 'lightning', name: 'Lightning', damage: 9, range: 5.8, fireRate: 1.25, splash: 0, color: 0xfff04a, shape: 'cross', desc: 'A chaining bolt that strikes nearby intrusions.', skill: {cooldown: 10, hits: 10}},
+  frost: {key: 'frost', name: 'Frost', damage: 10, range: 5.1, fireRate: 0.9, splash: 0, color: 0x75d9ff, shape: 'hex', desc: 'A chilling attack with a slowing skill.', slow: {amount: 0.15, duration: 2}, skill: {cooldown: 7, slowAmount: 0.45, radius: 2.4, duration: 3}}
 };
 
 export const ENEMY_TYPES = {

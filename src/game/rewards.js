@@ -56,6 +56,14 @@ export function createRewardPool(towerTypes, tileTypes, enchantmentTypes = {}) {
   return [...createTowerRewardPool(towerTypes), ...createTileRewardPool(tileTypes), ...enchantments];
 }
 
+/** Creates one inventory copy for a selected class's starting towers. */
+export function createStartingInventory(rewardPool, towerKeys) {
+  return towerKeys.flatMap((key) => {
+    const reward = rewardPool.find((item) => item.type === 'tower' && item.key === key);
+    return reward ? [{...reward}] : [];
+  });
+}
+
 /** Adds one separate copy of a selected reward to the inventory array. */
 export function addRewardToInventory(inventory, reward) {
   if (!reward || typeof reward.type !== 'string' || typeof reward.key !== 'string') {

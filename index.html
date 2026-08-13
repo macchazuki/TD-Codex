@@ -69,6 +69,9 @@
   .brackets::after{ bottom:-1px; right:-1px; border-bottom:2px solid; border-right:2px solid;}
 
   #hud{position:absolute; inset:0; pointer-events:none; display:flex; flex-direction:column; justify-content:space-between;}
+  #towerSkillControls{position:absolute; inset:0; pointer-events:none; z-index:25;}
+  .tower-skill-control{position:absolute; transform:translate(-50%,-50%); pointer-events:auto; padding:5px 8px; font:700 10px 'Space Mono',monospace; color:var(--text); background:rgba(10,16,30,.9); border:1px solid var(--panel-border); white-space:nowrap;}
+  .tower-skill-control.ready{color:var(--cyan); border-color:var(--cyan); cursor:pointer;}
 
   .hud-top{
     pointer-events:auto;
