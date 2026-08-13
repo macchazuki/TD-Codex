@@ -547,8 +547,7 @@ import { createSelectionElements } from './runtime/dom.js';
 
   function fireProjectile(tower){
     if (tower.key === 'lightning') {
-      const targets = buildLightningTargets(tower, 3, false);
-      if (targets.length) fireLightningProjectile(tower, targets, tower.damage);
+      if (tower.target?.alive) fireLightningProjectile(tower, [tower.target], tower.damage, 3, false);
       return;
     }
     const cfg = tower.cfg;
@@ -635,7 +634,7 @@ import { createSelectionElements } from './runtime/dom.js';
       fireSkillProjectile(tower, tower.target, cfg.skill.damage, cfg.skill.splash, cfg.skill);
     } else if (tower.key === 'lightning') {
       const targets = buildLightningTargets(tower, cfg.skill.hits, true);
-      if (targets.length) fireLightningProjectile(tower, targets, tower.damage);
+      if (targets.length) fireLightningProjectile(tower, targets, tower.damage, cfg.skill.hits, true);
     } else if (tower.key === 'frost') {
       enemies.forEach((enemy) => {
         if (enemy.alive && distXZ(tower.group.position, enemy.mesh.position) <= cfg.skill.radius) applySlow(enemy, cfg.skill.slowAmount, cfg.skill.duration);
@@ -739,11 +738,21 @@ import { createSelectionElements } from './runtime/dom.js';
         damageEnemy(proj.target, proj.damage, proj.sourceTower);
         applyHitEnchantments({tower: proj.sourceTower, damage: proj.damage, enemy: proj.target});
         if (proj.sourceTower.key === 'frost') applySlow(proj.target, proj.sourceTower.cfg.slow.amount, proj.sourceTower.cfg.slow.duration);
-        if (proj.lightning && proj.chainIndex < proj.chainTargets.length - 1) {
-          const nextTarget = proj.chainTargets[proj.chainIndex + 1];
+        if (proj.lightning && proj.chainIndex < proj.maxHits - 1) {
+          const nextTargets = selectChainTargets({
+            origin: proj.target.mesh.position,
+            enemies,
+            range: getChainRange(proj.sourceTower.range),
+            limit: 1,
+            visited: new Set(proj.chainTargets),
+            allowVisited: proj.allowRevisits && proj.chainTargets.length >= enemies.filter((enemy) => enemy.alive).length,
+            distance: distXZ
+          });
+          const nextTarget = nextTargets[0];
           if (nextTarget?.alive) {
             spawnLightningArc(proj.target.mesh.position, nextTarget.mesh.position, proj.sourceTower.cfg.color);
             proj.chainIndex += 1;
+            proj.chainTargets.push(nextTarget);
             proj.target = nextTarget;
             proj.mesh.position.set(nextTarget.mesh.position.x, 0.7, nextTarget.mesh.position.z);
             remaining.push(proj);
@@ -832,12 +841,12 @@ import { createSelectionElements } from './runtime/dom.js';
     return targets;
   }
 
-  function fireLightningProjectile(tower, targets, damage) {
+  function fireLightningProjectile(tower, targets, damage, maxHits, allowRevisits) {
     const mat = new THREE.MeshStandardMaterial({color: tower.cfg.color, emissive: tower.cfg.color, emissiveIntensity: 2.8});
     const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), mat);
     mesh.position.set(tower.group.position.x, 0.85, tower.group.position.z);
     projGroup.add(mesh);
-    projectiles.push({mesh, target: targets[0], chainTargets: targets, chainIndex: 0, damage, speed: 24, sourceTower: tower, lightning: true});
+    projectiles.push({mesh, target: targets[0], chainTargets: targets, chainIndex: 0, maxHits, allowRevisits, damage, speed: 24, sourceTower: tower, lightning: true});
   }
 
   function spawnLightningArc(from, to, color) {
