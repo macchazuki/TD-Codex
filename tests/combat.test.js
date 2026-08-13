@@ -15,6 +15,15 @@ describe('Mage combat skills', () => {
     expect(getChainRange(5.8)).toBe(2.9);
   });
 
+  it('selects chain targets shaped like runtime enemies', () => {
+    const enemies = [0, 2.5, 5].map((x) => ({alive: true, mesh: {position: {x, z: 0}}}));
+    const enemyDistance = (origin, enemy) => Math.hypot(origin.x - enemy.mesh.position.x, origin.z - enemy.mesh.position.z);
+    const first = selectChainTargets({origin: {x: 0, z: 0}, enemies, range: 5.8, limit: 1, distance: enemyDistance});
+    const second = selectChainTargets({origin: first[0].mesh.position, enemies, range: getChainRange(5.8), limit: 1, visited: new Set(first), distance: enemyDistance});
+    expect(first).toHaveLength(1);
+    expect(second[0]).toBe(enemies[1]);
+  });
+
   it('allows ten-hit chains to revisit targets', () => {
     const enemies = [0, 1].map((x) => ({x, alive: true}));
     const hits = [];

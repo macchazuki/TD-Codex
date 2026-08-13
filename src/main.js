@@ -746,7 +746,7 @@ import { createSelectionElements } from './runtime/dom.js';
             limit: 1,
             visited: new Set(proj.chainTargets),
             allowVisited: proj.allowRevisits && proj.chainTargets.length >= enemies.filter((enemy) => enemy.alive).length,
-            distance: distXZ
+            distance: (position, enemy) => distXZ(position, enemy.mesh.position)
           });
           const nextTarget = nextTargets[0];
           if (nextTarget?.alive) {
@@ -832,8 +832,9 @@ import { createSelectionElements } from './runtime/dom.js';
   function buildLightningTargets(tower, limit, allowRevisits) {
     const targets = [];
     let origin = tower.group.position;
+    const enemyDistance = (position, enemy) => distXZ(position, enemy.mesh.position);
     for (let index = 0; index < limit; index += 1) {
-      const candidates = selectChainTargets({origin, enemies, range: index === 0 ? tower.range : getChainRange(tower.range), limit: 1, visited: new Set(targets), allowVisited: allowRevisits && index >= enemies.filter((enemy) => enemy.alive).length, distance: distXZ});
+      const candidates = selectChainTargets({origin, enemies, range: index === 0 ? tower.range : getChainRange(tower.range), limit: 1, visited: new Set(targets), allowVisited: allowRevisits && index >= enemies.filter((enemy) => enemy.alive).length, distance: enemyDistance});
       if (!candidates.length) break;
       targets.push(candidates[0]);
       origin = candidates[0].mesh.position;
