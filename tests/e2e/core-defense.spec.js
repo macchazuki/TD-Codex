@@ -20,6 +20,7 @@ async function dispatchTouchPointer(page, type, pointerId, point) {
 test('shows the main menu and starts the tower defence map', async ({page}) => {
   await page.goto('./');
   await expect(page.locator('#mainMenu')).toBeVisible();
+  await expect(page.locator('#gameCanvas')).toBeHidden();
   await expect(page.locator('#startGameBtn')).toHaveText('START GAME');
   await expect(page.locator('#settingsBtn')).toHaveText('SETTINGS');
   await page.locator('#settingsBtn').click();

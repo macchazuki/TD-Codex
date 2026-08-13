@@ -1353,6 +1353,7 @@ import { startGameLoop } from './runtime/loop.js';
   function startGame(){
     gameStarted = true;
     mainMenu.classList.add('hidden');
+    canvas.classList.remove('hidden');
   }
 
   startGameBtn.addEventListener('click', startGame);
