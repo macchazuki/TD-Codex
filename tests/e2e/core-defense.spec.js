@@ -204,8 +204,14 @@ test('keeps Mage skill controls attached while refreshing cooldown state', async
   await page.locator('[data-wall-mode="normal"]').click();
   await page.locator('[data-key="fireball"]').click();
   await page.mouse.click(cell.x, cell.y);
+  await page.mouse.click(cell.x, cell.y);
 
   const skill = page.locator('#towerSkillControls [data-tower-key="fireball"]');
+  const autoCast = page.locator('#autoCastSkillBtn');
+  await expect(autoCast).toHaveText('AUTO CAST: OFF');
+  await autoCast.click();
+  await expect(autoCast).toHaveText('AUTO CAST: ON');
+  await expect(autoCast).toHaveAttribute('aria-pressed', 'true');
   await expect(skill).toHaveText('Fireball SKILL');
   await page.evaluate(() => {
     window.__skillControlForTest = document.querySelector('#towerSkillControls [data-tower-key="fireball"]');

@@ -36,6 +36,7 @@ const GAME_HUD_TEMPLATE = `
           <div class="row"><span>RATE</span><b id="selRate">-</b></div>
           <div class="row"><span>KILLS</span><b id="selKills">-</b></div>
           <div class="row"><span>ENCHANTMENTS</span><b id="selEnchantments">-</b></div>
+          <button id="autoCastSkillBtn" class="tower-auto-cast-btn" type="button" aria-pressed="false">AUTO CAST: OFF</button>
           <div id="upgradeActions" class="upgrade-actions" aria-label="Tower upgrades">
             <button id="upgradeDamageBtn" class="upgrade-btn" data-stat="damage"><span>DAMAGE +20%</span><b id="damageUpgradeCost">⬡ 40</b></button>
             <button id="upgradeRangeBtn" class="upgrade-btn" data-stat="range"><span>RANGE +10%</span><b id="rangeUpgradeCost">⬡ 35</b></button>
@@ -147,6 +148,7 @@ export function createGameElements() {
     selRate: document.getElementById('selRate'),
     selKills: document.getElementById('selKills'),
     selEnchantments: document.getElementById('selEnchantments'),
+    autoCastSkillBtn: document.getElementById('autoCastSkillBtn'),
     upgradeActions: document.getElementById('upgradeActions'),
     purgeBtn: document.getElementById('purgeBtn'),
     towerSkillControls: document.getElementById('towerSkillControls'),

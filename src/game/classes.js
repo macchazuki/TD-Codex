@@ -13,8 +13,8 @@ export const ENGINEER_PERKS = Object.freeze([
 ]);
 
 export const MAGE_PERKS = Object.freeze([
-  Object.freeze({key: 'arcane-focus', name: 'Arcane Focus', description: 'A discipline of precise arcane control.'}),
-  Object.freeze({key: 'elemental-mastery', name: 'Elemental Mastery', description: 'A study of elemental forces.'})
+  Object.freeze({key: 'arcane-focus', name: 'Arcane Focus', description: 'Basic attacks deal +15% damage, but skills deal -10% damage.'}),
+  Object.freeze({key: 'elemental-mastery', name: 'Elemental Mastery', description: 'Skills deal +15% damage, but basic attacks deal -10% damage.'})
 ]);
 
 export const CLASS_PERKS = Object.freeze({engineer: ENGINEER_PERKS, mage: MAGE_PERKS});
