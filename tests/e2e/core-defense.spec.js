@@ -3,6 +3,15 @@ import { expect, test } from '@playwright/test';
 async function gotoGame(page) {
   await page.goto('./');
   await page.locator('#startGameBtn').click();
+  await page.locator('[data-class-key="engineer"]').click();
+  await page.locator('#classContinueBtn').click();
+  await page.locator('#deployBtn').click();
+}
+
+async function chooseEngineer(page) {
+  await page.locator('#startGameBtn').click();
+  await page.locator('[data-class-key="engineer"]').click();
+  await page.locator('#classContinueBtn').click();
 }
 
 async function dispatchTouchPointer(page, type, pointerId, point) {
@@ -31,7 +40,9 @@ test('shows the main menu and starts the tower defence map', async ({page}) => {
   await expect(page.locator('#settingsBtn')).toHaveText('SETTINGS');
   await page.locator('#settingsBtn').click();
   await expect(page.locator('#mainMenu')).toBeVisible();
-  await page.locator('#startGameBtn').click();
+  await chooseEngineer(page);
+  await expect(page.locator('#perkCards .perk-card')).toHaveCount(2);
+  await page.locator('#deployBtn').click();
   await expect(page.locator('#hud')).toBeVisible();
   await expect(page.locator('#mainMenu')).toBeHidden();
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().scene)).toBe('tower-defence-map');
@@ -54,6 +65,32 @@ test('shows game speed controls with normal speed active', async ({page}) => {
   await expect(page.locator('.speed-btn.active')).toHaveText('1x');
   await expect(page.locator('.speed-btn[data-speed="1"]')).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().gameSpeed)).toBe(1);
+});
+
+test('selects an engineer loadout before deployment', async ({page}) => {
+  await page.goto('./');
+  await expect(page.locator('#hud')).toHaveCount(0);
+  await page.locator('#startGameBtn').click();
+  await expect(page.locator('#classSelection')).toBeVisible();
+  await expect(page.locator('#gameCanvas')).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState())).toMatchObject({startupStage: 'class-selection', mapCells: 0, selectedClass: null, selectedPerks: []});
+
+  await page.locator('[data-class-key="engineer"]').click();
+  await page.locator('#classContinueBtn').click();
+  await expect(page.locator('#perkSelection')).toBeVisible();
+  await expect(page.locator('.perk-card')).toHaveCount(2);
+  await expect(page.locator('.perk-card.selected')).toHaveCount(0);
+  await page.locator('[data-perk-key="tower-upgrades"]').click();
+  await page.locator('[data-perk-key="gold-interest"]').click();
+  await expect(page.locator('.perk-card.selected')).toHaveCount(2);
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState())).toMatchObject({startupStage: 'perk-selection', selectedClass: 'engineer', selectedPerks: ['tower-upgrades', 'gold-interest'], mapCells: 0});
+
+  await page.locator('#deployBtn').click();
+  await expect(page.locator('#hud')).toBeVisible();
+  await expect(page.locator('#activeClassName')).toHaveText('The Engineer');
+  await expect(page.locator('#activePerks')).toContainText('Tower Upgrades');
+  await expect(page.locator('#activePerks')).toContainText('Gold Interest');
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState())).toMatchObject({scene: 'tower-defence-map', selectedClass: 'engineer', selectedPerks: ['tower-upgrades', 'gold-interest'], mapCells: 96});
 });
 
 test('shows wall mode controls with normal mode active', async ({page}) => {

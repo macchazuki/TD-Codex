@@ -12,6 +12,8 @@ import { createGameState } from './runtime/state.js';
 import { getPointOnRoute as getPointOnRouteFromPath, getRouteMetrics as getRouteMetricsFromPath, gridToWorld as gridToWorldFromPath } from './runtime/path.js';
 import { createCameraController } from './runtime/camera.js';
 import { startGameLoop } from './runtime/loop.js';
+import { ENGINEER_PERKS, GAME_CLASSES, getGameClass, togglePerk } from './game/classes.js';
+import { createSelectionElements } from './runtime/dom.js';
 
 (function(){
   "use strict";
@@ -21,14 +23,79 @@ import { startGameLoop } from './runtime/loop.js';
   let {gold, lives, wave, waveInProgress, gameOver, awaitingReward, selectedTowerType, selectedTileType, selectedEnchantmentType, selectedTower, gameSpeed, wallEditMode, spawnQueue, spawnTimer, towers, enemies, projectiles, effects, pulses, inventory, tiles, currentRewards, occupiedSet, wallSet, pathSet, pathSetRoute, routeVersion, startCell, endCell, worldWaypoints, segmentLengths: segLengths, pathTotalLength} = state;
   const WALL_TOP = 0.78;
   const {canvas, mainMenu, startGameBtn} = getMenuElements();
+  const selection = createSelectionElements();
   let gameStarted = false;
   let gameInitialized = false;
+  let startupStage = 'main-menu';
+  let selectedClassKey = null;
+  let selectedPerkKeys = [];
+
+  function showSelectionScreen(screen) {
+    mainMenu.classList.add('hidden');
+    selection.classSelection.classList.toggle('hidden', screen !== 'class-selection');
+    selection.perkSelection.classList.toggle('hidden', screen !== 'perk-selection');
+  }
+
+  function renderClassCards() {
+    selection.classCards.innerHTML = GAME_CLASSES.map((gameClass) => `
+      <button class="selection-card class-card${selectedClassKey === gameClass.key ? ' selected' : ''}" data-class-key="${gameClass.key}" type="button" aria-pressed="${selectedClassKey === gameClass.key}">
+        <span class="selection-card-label">CLASS</span><strong>${gameClass.name}</strong><span>${gameClass.description}</span>
+      </button>`).join('');
+    selection.classCards.querySelectorAll('[data-class-key]').forEach((card) => card.addEventListener('click', () => {
+      selectedClassKey = card.dataset.classKey;
+      renderClassCards();
+      selection.classContinueBtn.disabled = !selectedClassKey;
+    }));
+  }
+
+  function renderPerkCards() {
+    selection.perkCards.innerHTML = ENGINEER_PERKS.map((perk) => {
+      const isSelected = selectedPerkKeys.includes(perk.key);
+      return `<button class="selection-card perk-card${isSelected ? ' selected' : ''}" data-perk-key="${perk.key}" type="button" aria-pressed="${isSelected}"><span class="selection-card-label">PERK</span><strong>${perk.name}</strong><span>${perk.description}</span><small>${isSelected ? 'ACTIVE' : 'NOT SELECTED'}</small></button>`;
+    }).join('');
+    selection.perkSelectionStatus.textContent = `${selectedPerkKeys.length} / 5 SELECTED`;
+    selection.perkCards.querySelectorAll('[data-perk-key]').forEach((card) => card.addEventListener('click', () => {
+      const result = togglePerk(selectedPerkKeys, card.dataset.perkKey);
+      if (result.ok) {
+        selectedPerkKeys = result.perkKeys;
+        renderPerkCards();
+      }
+    }));
+  }
+
+  function openClassSelection() {
+    startupStage = 'class-selection';
+    renderClassCards();
+    selection.classContinueBtn.disabled = !selectedClassKey;
+    showSelectionScreen('class-selection');
+  }
+
+  function openPerkSelection() {
+    startupStage = 'perk-selection';
+    renderPerkCards();
+    showSelectionScreen('perk-selection');
+  }
 
   function startGame(){
     if(gameInitialized) return;
+    openClassSelection();
+  }
+
+  function deployGame(){
+    if (!getGameClass(selectedClassKey)) return;
+    if (gameInitialized) {
+      gameStarted = true;
+      startupStage = 'deployed';
+      selection.classSelection.classList.add('hidden');
+      selection.perkSelection.classList.add('hidden');
+      canvas.classList.remove('hidden');
+      return;
+    }
     gameInitialized = true;
     gameStarted = true;
-    mainMenu.classList.add('hidden');
+    startupStage = 'deployed';
+    selection.classSelection.classList.add('hidden');
+    selection.perkSelection.classList.add('hidden');
     canvas.classList.remove('hidden');
     initializeGame();
   }
@@ -36,6 +103,8 @@ import { startGameLoop } from './runtime/loop.js';
   function initializeGame(){
   const elements = createGameElements();
   const {scene, camera, renderer} = createScene(canvas, GRID_W, GRID_H, CELL);
+  elements.activeClassName.textContent = getGameClass(selectedClassKey).name;
+  elements.activePerks.textContent = selectedPerkKeys.length ? selectedPerkKeys.map((key) => ENGINEER_PERKS.find((perk) => perk.key === key).name).join(' · ') : 'No active perks';
 
   // camera orbit
   const cameraController = createCameraController(camera);
@@ -1360,6 +1429,13 @@ import { startGameLoop } from './runtime/loop.js';
     rewardCardsEl.innerHTML = '';
     rewardOverlay.classList.add('hidden');
     overlay.classList.add('hidden');
+    selectedClassKey = null;
+    selectedPerkKeys = [];
+    startupStage = 'class-selection';
+    gameStarted = false;
+    canvas.classList.add('hidden');
+    renderClassCards();
+    showSelectionScreen('class-selection');
   }
 
   // Lightweight inspection surface for browser tests and deployment
@@ -1368,7 +1444,10 @@ import { startGameLoop } from './runtime/loop.js';
   window.__CORE_DEFENSE__ = {
     getSceneState(){
       return {
-        scene: gameStarted ? 'tower-defence-map' : 'main-menu',
+        scene: gameStarted ? 'tower-defence-map' : startupStage,
+        startupStage,
+        selectedClass: selectedClassKey,
+        selectedPerks: [...selectedPerkKeys],
         renderStatus: canvas.dataset.renderStatus || 'unknown',
         renderCalls: renderer.info.render.calls,
         gold: Math.floor(gold),
@@ -1444,12 +1523,23 @@ import { startGameLoop } from './runtime/loop.js';
   window.__CORE_DEFENSE__ = {
     getSceneState(){
       return {
-        scene: gameStarted ? 'tower-defence-map' : 'main-menu',
+        scene: gameStarted ? 'tower-defence-map' : startupStage,
+        startupStage,
+        selectedClass: selectedClassKey,
+        selectedPerks: [...selectedPerkKeys],
         renderStatus: canvas.dataset.renderStatus || 'unknown',
         renderCalls: 0,
         mapCells: 0
       };
     }
   };
+  selection.classContinueBtn.addEventListener('click', openPerkSelection);
+  selection.classBackBtn.addEventListener('click', () => {
+    startupStage = 'main-menu';
+    selection.classSelection.classList.add('hidden');
+    mainMenu.classList.remove('hidden');
+  });
+  selection.perkBackBtn.addEventListener('click', openClassSelection);
+  selection.deployBtn.addEventListener('click', deployGame);
   startGameBtn.addEventListener('click', startGame);
 })();
