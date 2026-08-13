@@ -786,8 +786,10 @@ import { createSelectionElements } from './runtime/dom.js';
     for(const fx of effects){
       fx.life -= dt;
       if(fx.life <= 0){ scene.remove(fx.mesh); continue; }
-      const s = 1 + (1-fx.life/fx.maxLife)*3;
-      fx.mesh.scale.set(s,s,s);
+      if (fx.shouldScale !== false) {
+        const s = 1 + (1-fx.life/fx.maxLife)*3;
+        fx.mesh.scale.set(s,s,s);
+      }
       fx.mesh.material.opacity = fx.life/fx.maxLife;
       remaining.push(fx);
     }
@@ -871,7 +873,7 @@ import { createSelectionElements } from './runtime/dom.js';
     points.push(end);
     const mesh = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({color, transparent: true, opacity: 1}));
     scene.add(mesh);
-    effects.push({mesh, life: 0.18, maxLife: 0.18});
+    effects.push({mesh, life: 0.18, maxLife: 0.18, shouldScale: false});
   }
 
   function updateGoldUI(){ goldValEl.textContent = Math.floor(gold); refreshNodeCards(); refreshSelectedTowerUI(); }
