@@ -6,7 +6,7 @@ import { addRewardToInventory, createRewardPool, drawRewards, removeFromInventor
 import { INITIAL_TILES, SPECIAL_TILE_TYPES, applyDotTick, canPlaceTile, getEffectiveTowerStats, getEnemyTileEffect, getTileAt } from './game/specialTiles.js';
 import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } from './game/upgrades.js';
 import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBounty, tickDotStacks } from './game/enchantments.js';
-import { getGameElements } from './runtime/dom.js';
+import { createGameElements, getMenuElements } from './runtime/dom.js';
 import { createScene } from './runtime/scene.js';
 import { createGameState } from './runtime/state.js';
 import { getPointOnRoute as getPointOnRouteFromPath, getRouteMetrics as getRouteMetricsFromPath, gridToWorld as gridToWorldFromPath } from './runtime/path.js';
@@ -20,8 +20,21 @@ import { startGameLoop } from './runtime/loop.js';
   const state = createGameState({rewardPool, initialTiles: INITIAL_TILES, defaultGameSpeed: DEFAULT_GAME_SPEED, gridWidth: GRID_W, gridHeight: GRID_H});
   let {gold, lives, wave, waveInProgress, gameOver, awaitingReward, selectedTowerType, selectedTileType, selectedEnchantmentType, selectedTower, gameSpeed, wallEditMode, spawnQueue, spawnTimer, towers, enemies, projectiles, effects, pulses, inventory, tiles, currentRewards, occupiedSet, wallSet, pathSet, pathSetRoute, routeVersion, startCell, endCell, worldWaypoints, segmentLengths: segLengths, pathTotalLength} = state;
   const WALL_TOP = 0.78;
-  const elements = getGameElements();
-  const {canvas} = elements;
+  const {canvas, mainMenu, startGameBtn} = getMenuElements();
+  let gameStarted = false;
+  let gameInitialized = false;
+
+  function startGame(){
+    if(gameInitialized) return;
+    gameInitialized = true;
+    gameStarted = true;
+    mainMenu.classList.add('hidden');
+    canvas.classList.remove('hidden');
+    initializeGame();
+  }
+
+  function initializeGame(){
+  const elements = createGameElements();
   const {scene, camera, renderer} = createScene(canvas, GRID_W, GRID_H, CELL);
 
   // camera orbit
@@ -1355,6 +1368,7 @@ import { startGameLoop } from './runtime/loop.js';
   window.__CORE_DEFENSE__ = {
     getSceneState(){
       return {
+        scene: gameStarted ? 'tower-defence-map' : 'main-menu',
         renderStatus: canvas.dataset.renderStatus || 'unknown',
         renderCalls: renderer.info.render.calls,
         gold: Math.floor(gold),
@@ -1425,4 +1439,17 @@ import { startGameLoop } from './runtime/loop.js';
     updatePulses, isGameOver: () => gameOver, isWaveInProgress: () => waveInProgress,
     onElapsed: (value) => { elapsed = value; }
   });
+  }
+
+  window.__CORE_DEFENSE__ = {
+    getSceneState(){
+      return {
+        scene: gameStarted ? 'tower-defence-map' : 'main-menu',
+        renderStatus: canvas.dataset.renderStatus || 'unknown',
+        renderCalls: 0,
+        mapCells: 0
+      };
+    }
+  };
+  startGameBtn.addEventListener('click', startGame);
 })();
