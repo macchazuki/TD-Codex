@@ -398,7 +398,12 @@ test('places a rewarded tile and restores the initial layout on reset', async ({
 });
 
 test('purchases escalating upgrades and preserves them through purge', async ({page}) => {
-  await gotoGame(page);
+  await page.goto('./');
+  await page.locator('#startGameBtn').click();
+  await page.locator('[data-class-key="engineer"]').click();
+  await page.locator('#classContinueBtn').click();
+  await page.locator('[data-perk-key="tower-upgrades"]').click();
+  await page.locator('#deployBtn').click();
   const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
   await page.locator('[data-wall-mode="build"]').click();
   await page.mouse.click(cell.x, cell.y);
@@ -425,6 +430,32 @@ test('purchases escalating upgrades and preserves them through purge', async ({p
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState())).toMatchObject({
     towerUpgrades: [{damage: 1, range: 0, fireRate: 0}]
   });
+});
+
+test('gates tower upgrades behind the tower-upgrades perk', async ({page}) => {
+  await gotoGame(page);
+  const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
+  await page.locator('[data-wall-mode="build"]').click();
+  await page.mouse.click(cell.x, cell.y);
+  await page.locator('[data-wall-mode="normal"]').click();
+  await page.locator('#nodeCards .node-card').first().click();
+  await page.mouse.click(cell.x, cell.y);
+  await page.mouse.click(cell.x, cell.y);
+
+  await expect(page.locator('#upgradeActions')).toBeHidden();
+  await expect(page.locator('#goldVal')).toHaveText('150');
+});
+
+test('awards gold interest when a wave ends', async ({page}) => {
+  await page.goto('./');
+  await page.locator('#startGameBtn').click();
+  await page.locator('[data-class-key="engineer"]').click();
+  await page.locator('#classContinueBtn').click();
+  await page.locator('[data-perk-key="gold-interest"]').click();
+  await page.locator('#deployBtn').click();
+  await page.evaluate(() => window.__CORE_DEFENSE__.completeWaveForTest());
+  await expect(page.locator('#goldVal')).toHaveText('165');
+  await expect(page.locator('#rewardOverlay')).toBeVisible();
 });
 
 test('starts a wave after selecting a tower', async ({page}) => {
