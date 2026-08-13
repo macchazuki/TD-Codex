@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {activateSkill, applyBurn, applySlow, getChainRange, isSkillReady, selectChainTargets, tickBurn, tickSlow} from '../src/game/combat.js';
+import {activateSkill, applyBurn, applySlow, canAutoCastSkill, getChainRange, isSkillReady, selectChainTargets, tickBurn, tickSlow} from '../src/game/combat.js';
 
 const distance = (origin, enemy) => Math.abs(origin.x - enemy.x);
 
@@ -52,5 +52,14 @@ describe('Mage combat skills', () => {
     expect(activateSkill(tower)).toBe(true);
     expect(tower.skillCooldown).toBe(8);
     expect(activateSkill(tower)).toBe(false);
+  });
+
+  it('only auto-casts when the skill can affect an enemy', () => {
+    const tower = {key: 'fireball', cfg: {skill: {cooldown: 8}}, skillCooldown: 0, target: null};
+    const enemy = {alive: true, mesh: {position: {x: 1, z: 0}}};
+    tower.group = {position: {x: 0, z: 0}};
+    expect(canAutoCastSkill(tower, [enemy], () => 1)).toBe(false);
+    tower.target = enemy;
+    expect(canAutoCastSkill(tower, [enemy], () => 1)).toBe(true);
   });
 });

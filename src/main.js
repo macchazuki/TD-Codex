@@ -13,8 +13,8 @@ import { getPointOnRoute as getPointOnRouteFromPath, getRouteMetrics as getRoute
 import { createCameraController } from './runtime/camera.js';
 import { startGameLoop } from './runtime/loop.js';
 import { GAME_CLASSES, getGameClass, getPerksForClass, getStartingTowerKeys, togglePerk } from './game/classes.js';
-import { applyBurn, applySlow, activateSkill, getChainRange, isSkillReady, selectChainTargets, tickBurn, tickSlow } from './game/combat.js';
-import { calculateInterest, hasPerk, PERK_KEYS } from './game/perks.js';
+import { applyBurn, applySlow, activateSkill, canAutoCastSkill, getChainRange, isSkillReady, selectChainTargets, tickBurn, tickSlow } from './game/combat.js';
+import { calculateInterest, getDamageModifiers, hasPerk, PERK_KEYS } from './game/perks.js';
 import { createSelectionElements } from './runtime/dom.js';
 
 (function(){
@@ -438,7 +438,7 @@ import { createSelectionElements } from './runtime/dom.js';
       damage: stats.damage, range: stats.range, fireRate: stats.fireRate, splash: cfg.splash,
       upgrades, enchantments: [...(inventoryItem?.enchantments || [])],
       cooldown: 0, target: null, kills: 0,
-      rangeRing: null, skillCooldown: 0, skillLabel: null
+      rangeRing: null, skillCooldown: 0, skillLabel: null, autoCast: false
     };
     group.userData.towerRef = tower;
     towers.push(tower);
@@ -633,10 +633,10 @@ import { createSelectionElements } from './runtime/dom.js';
     if (!activateSkill(tower)) return false;
     const cfg = tower.cfg;
     if (tower.key === 'fireball' && tower.target?.alive) {
-      fireSkillProjectile(tower, tower.target, cfg.skill.damage, cfg.skill.splash, cfg.skill);
+      fireSkillProjectile(tower, tower.target, cfg.skill.damage * (1 + getDamageModifiers(selectedPerkKeys).skill), cfg.skill.splash, cfg.skill);
     } else if (tower.key === 'lightning') {
       const targets = buildLightningTargets(tower, cfg.skill.hits, true);
-      fireLightningAttack(tower, cfg.skill.hits, targets);
+      fireLightningAttack(tower, cfg.skill.hits, targets, 1 + getDamageModifiers(selectedPerkKeys).skill);
     } else if (tower.key === 'frost') {
       enemies.forEach((enemy) => {
         if (enemy.alive && distXZ(tower.group.position, enemy.mesh.position) <= cfg.skill.radius) applySlow(enemy, cfg.skill.slowAmount, cfg.skill.duration);
@@ -719,6 +719,7 @@ import { createSelectionElements } from './runtime/dom.js';
           tower.cooldown = 1/tower.fireRate;
         }
       }
+      if(tower.autoCast && canAutoCastSkill(tower, enemies, distXZ)) activateTowerSkill(tower);
       if(selectedTower === tower){
         tower.group.userData.turret.position.y = 0.42;
       }
@@ -796,6 +797,7 @@ import { createSelectionElements } from './runtime/dom.js';
   }
 
   const towerSkillControlsByTower = new Map();
+  const towerAutoCastControlsByTower = new Map();
 
   function createTowerSkillControl(tower) {
     if (!tower.cfg.skill || towerSkillControlsByTower.has(tower)) return;
@@ -805,7 +807,18 @@ import { createSelectionElements } from './runtime/dom.js';
     control.dataset.towerKey = tower.key;
     control.addEventListener('click', () => activateTowerSkill(tower));
     towerSkillControls.appendChild(control);
+    const autoCastControl = document.createElement('button');
+    autoCastControl.type = 'button';
+    autoCastControl.className = 'tower-skill-auto-cast';
+    autoCastControl.dataset.towerKey = tower.key;
+    autoCastControl.setAttribute('aria-label', `Toggle auto-cast for ${tower.cfg.name}`);
+    autoCastControl.addEventListener('click', () => {
+      tower.autoCast = !tower.autoCast;
+      refreshTowerSkillLabels();
+    });
+    towerSkillControls.appendChild(autoCastControl);
     towerSkillControlsByTower.set(tower, control);
+    towerAutoCastControlsByTower.set(tower, autoCastControl);
     tower.skillLabel = control;
   }
 
@@ -814,6 +827,8 @@ import { createSelectionElements } from './runtime/dom.js';
     if (!control) return;
     control.remove();
     towerSkillControlsByTower.delete(tower);
+    towerAutoCastControlsByTower.get(tower)?.remove();
+    towerAutoCastControlsByTower.delete(tower);
     tower.skillLabel = null;
   }
 
@@ -825,9 +840,15 @@ import { createSelectionElements } from './runtime/dom.js';
       control.classList.toggle('ready', ready);
       control.disabled = !ready;
       control.textContent = ready ? `${tower.cfg.name} SKILL` : `${tower.skillCooldown.toFixed(1)}s`;
+      const autoCastControl = towerAutoCastControlsByTower.get(tower);
+      autoCastControl.classList.toggle('active', tower.autoCast);
+      autoCastControl.setAttribute('aria-pressed', String(tower.autoCast));
+      autoCastControl.textContent = tower.autoCast ? 'AUTO ON' : 'AUTO OFF';
       const position = projectWorldPosition(tower.group.position);
       control.style.left = `${position.x}px`;
       control.style.top = `${position.y}px`;
+      autoCastControl.style.left = `${position.x}px`;
+      autoCastControl.style.top = `${position.y + 25}px`;
     });
   }
 
@@ -868,7 +889,7 @@ import { createSelectionElements } from './runtime/dom.js';
     effects.push({mesh, life: 0.18, maxLife: 0.18, shouldScale: false});
   }
 
-  function fireLightningAttack(tower, maxHits = 3, targets = null) {
+  function fireLightningAttack(tower, maxHits = 3, targets = null, damageMultiplier = 1) {
     const hitTargets = [];
     let origin = tower.group.position;
     let target = tower.target?.alive ? tower.target : null;
@@ -887,8 +908,8 @@ import { createSelectionElements } from './runtime/dom.js';
       }
       if (!target?.alive) break;
       spawnLightningArc(origin, target.mesh.position, tower.cfg.color);
-      damageEnemy(target, tower.damage, tower);
-      applyHitEnchantments({tower, damage: tower.damage, enemy: target});
+      damageEnemy(target, tower.damage * damageMultiplier, tower);
+      applyHitEnchantments({tower, damage: tower.damage * damageMultiplier, enemy: target});
       hitTargets.push(target);
       origin = target.mesh.position;
       target = null;
@@ -983,7 +1004,7 @@ import { createSelectionElements } from './runtime/dom.js';
     const tile = getTileAt(tiles, tower.gx, tower.gy);
     const upgradedStats = getTowerStats(tower.cfg, tower.upgrades);
     const stats = getEffectiveTowerStats({damage: upgradedStats.damage, fireRate: upgradedStats.fireRate}, tile);
-    tower.damage = stats.damage;
+    tower.damage = stats.damage * (1 + getDamageModifiers(selectedPerkKeys).attack);
     tower.range = upgradedStats.range;
     tower.fireRate = stats.fireRate;
     tower.activeTile = tile?.key || null;
@@ -1623,7 +1644,7 @@ import { createSelectionElements } from './runtime/dom.js';
         enchantmentInventory: inventory.filter((item) => item.type === 'enchantment').map((item) => item.key),
         enemyEffects: enemies.map((enemy) => ({activeTile: enemy.activeTile, speedMultiplier: enemy.activeTileEffect.speedMultiplier, dotDamage: enemy.activeTileEffect.dotDamage, dotTimer: enemy.dotTimer})),
         towerStats: towers.map((tower) => ({key: tower.key, gx: tower.gx, gy: tower.gy, damage: tower.damage, range: tower.range, fireRate: tower.fireRate, activeTile: tower.activeTile})),
-        towerSkills: towers.filter((tower) => tower.cfg.skill).map((tower) => ({key: tower.key, cooldown: tower.skillCooldown, ready: isSkillReady(tower)})),
+        towerSkills: towers.filter((tower) => tower.cfg.skill).map((tower) => ({key: tower.key, cooldown: tower.skillCooldown, ready: isSkillReady(tower), autoCast: tower.autoCast})),
         activeStatuses: enemies.map((enemy) => ({slow: [...(enemy.slowStatuses || [])], burn: [...(enemy.burnStatuses || [])]})),
         towerUpgrades: towers.map((tower) => ({...tower.upgrades})),
         towerEnchantments: towers.map((tower) => [...tower.enchantments]),

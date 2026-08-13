@@ -53,3 +53,12 @@ export function activateSkill(tower) {
   tower.skillCooldown = tower.cfg.skill.cooldown;
   return true;
 }
+
+/** Returns whether an automatic skill cast has an eligible enemy to affect. */
+export function canAutoCastSkill(tower, enemies, distance) {
+  if (!isSkillReady(tower)) return false;
+  if (tower.key === 'frost') {
+    return enemies.some((enemy) => enemy.alive && distance(tower.group.position, enemy.mesh.position) <= tower.cfg.skill.radius);
+  }
+  return Boolean(tower.target?.alive);
+}
