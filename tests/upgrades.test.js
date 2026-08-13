@@ -23,7 +23,7 @@ describe('tower upgrades', () => {
   });
 
   it('purchases an upgrade and returns the updated balance and state', () => {
-    const result = purchaseTowerUpgrade({tower, stat: 'damage', gold: 100});
+    const result = purchaseTowerUpgrade({tower, stat: 'damage', gold: 100, perkKeys: ['tower-upgrades']});
 
     expect(result).toEqual({
       ok: true,
@@ -36,14 +36,21 @@ describe('tower upgrades', () => {
   });
 
   it('rejects unaffordable or unknown upgrades without changing state', () => {
-    expect(purchaseTowerUpgrade({tower, stat: 'range', gold: 34})).toEqual({
+    expect(purchaseTowerUpgrade({tower, stat: 'range', gold: 34, perkKeys: ['tower-upgrades']})).toEqual({
       ok: false,
       reason: 'insufficient-gold',
       cost: 35
     });
-    expect(purchaseTowerUpgrade({tower, stat: 'splash', gold: 100})).toEqual({
+    expect(purchaseTowerUpgrade({tower, stat: 'splash', gold: 100, perkKeys: ['tower-upgrades']})).toEqual({
       ok: false,
       reason: 'unknown-stat'
+    });
+  });
+
+  it('requires the tower-upgrades perk', () => {
+    expect(purchaseTowerUpgrade({tower, stat: 'damage', gold: 100})).toEqual({
+      ok: false,
+      reason: 'perk-required'
     });
   });
 });

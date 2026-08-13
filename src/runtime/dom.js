@@ -79,7 +79,7 @@ export function createSelectionElements() {
       <div class="selection-box brackets">
         <div class="selection-kicker">LOADOUT CONFIGURATION / 02</div>
         <h1 id="perkSelectionTitle">SELECT PERKS</h1>
-        <p class="selection-subtitle">Choose up to five active perks. Effects are informational for now.</p>
+        <p class="selection-subtitle">Choose up to five active perks for this deployment.</p>
         <div id="perkCards"></div>
         <div id="perkSelectionStatus" aria-live="polite">0 / 5 SELECTED</div>
         <button id="deployBtn" class="menu-btn" type="button">DEPLOY</button>

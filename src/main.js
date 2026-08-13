@@ -13,6 +13,7 @@ import { getPointOnRoute as getPointOnRouteFromPath, getRouteMetrics as getRoute
 import { createCameraController } from './runtime/camera.js';
 import { startGameLoop } from './runtime/loop.js';
 import { ENGINEER_PERKS, GAME_CLASSES, getGameClass, togglePerk } from './game/classes.js';
+import { calculateInterest, hasPerk, PERK_KEYS } from './game/perks.js';
 import { createSelectionElements } from './runtime/dom.js';
 
 (function(){
@@ -600,6 +601,12 @@ import { createSelectionElements } from './runtime/dom.js';
   function checkWaveComplete(){
     if(waveInProgress && !gameOver && spawnQueue.length===0 && enemies.length===0){
       waveInProgress = false;
+      const interest = calculateInterest({gold, perkKeys: selectedPerkKeys});
+      if(interest > 0){
+        gold += interest;
+        updateGoldUI();
+        showMessage(`INTEREST +${interest} GOLD`);
+      }
       presentWaveReward();
     }
   }
@@ -926,7 +933,7 @@ import { createSelectionElements } from './runtime/dom.js';
       const cost = getUpgradeCost(selectedTower, stat);
       const controls = upgradeButtons[stat];
       controls.cost.textContent = `⬡ ${cost}`;
-      controls.button.disabled = gameOver || gold < cost;
+      controls.button.disabled = gameOver || !hasPerk(selectedPerkKeys, PERK_KEYS.TOWER_UPGRADES) || gold < cost;
     });
   }
   function deselectTower(){
@@ -936,8 +943,8 @@ import { createSelectionElements } from './runtime/dom.js';
   }
   Object.keys(UPGRADE_STATS).forEach((stat)=>{
     upgradeButtons[stat].button.addEventListener('click', ()=>{
-      if(!selectedTower) return;
-      const result = purchaseTowerUpgrade({tower: selectedTower, stat, gold});
+      if(!selectedTower || !hasPerk(selectedPerkKeys, PERK_KEYS.TOWER_UPGRADES)) return;
+      const result = purchaseTowerUpgrade({tower: selectedTower, stat, gold, perkKeys: selectedPerkKeys});
       if(!result.ok){
         showMessage(result.reason === 'insufficient-gold' ? 'INSUFFICIENT GOLD' : 'INVALID UPGRADE');
         return;
@@ -1483,6 +1490,12 @@ import { createSelectionElements } from './runtime/dom.js';
     },
     showWaveRewardForTest(){
       presentWaveReward();
+    },
+    completeWaveForTest(){
+      waveInProgress = true;
+      spawnQueue = [];
+      enemies = [];
+      checkWaveComplete();
     },
     grantRewardForTest(type, key){
       const reward = rewardPool.find((item) => item.type === type && item.key === key);

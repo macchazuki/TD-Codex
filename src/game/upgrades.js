@@ -1,3 +1,5 @@
+import { hasPerk, PERK_KEYS } from './perks.js';
+
 /** Pure rules for calculating and purchasing tower stat upgrades. */
 
 export const UPGRADE_STATS = {
@@ -35,7 +37,8 @@ export function getTowerStats(baseStats, upgrades = {}) {
 }
 
 /** Calculates a purchase result without mutating the tower or gold balance. */
-export function purchaseTowerUpgrade({tower, stat, gold}) {
+export function purchaseTowerUpgrade({tower, stat, gold, perkKeys = []}) {
+  if (!hasPerk(perkKeys, PERK_KEYS.TOWER_UPGRADES)) return {ok: false, reason: 'perk-required'};
   const cost = getUpgradeCost(tower, stat);
   if (cost === null) return {ok: false, reason: 'unknown-stat'};
   if (!Number.isFinite(gold) || gold < cost) return {ok: false, reason: 'insufficient-gold', cost};
