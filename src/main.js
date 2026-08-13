@@ -547,7 +547,7 @@ import { createSelectionElements } from './runtime/dom.js';
 
   function fireProjectile(tower){
     if (tower.key === 'lightning') {
-      if (tower.target?.alive) fireLightningProjectile(tower, [tower.target], tower.damage, 3, false);
+      fireLightningAttack(tower);
       return;
     }
     const cfg = tower.cfg;
@@ -874,6 +874,32 @@ import { createSelectionElements } from './runtime/dom.js';
     const mesh = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({color, transparent: true, opacity: 1}));
     scene.add(mesh);
     effects.push({mesh, life: 0.18, maxLife: 0.18, shouldScale: false});
+  }
+
+  function fireLightningAttack(tower) {
+    const hitTargets = [];
+    let origin = tower.group.position;
+    let target = tower.target?.alive ? tower.target : null;
+    for (let index = 0; index < 3; index += 1) {
+      if (!target) {
+        const candidates = selectChainTargets({
+          origin,
+          enemies,
+          range: index === 0 ? tower.range : getChainRange(tower.range),
+          limit: 1,
+          visited: new Set(hitTargets),
+          distance: (position, enemy) => distXZ(position, enemy.mesh.position)
+        });
+        target = candidates[0] || null;
+      }
+      if (!target?.alive) break;
+      spawnLightningArc(origin, target.mesh.position, tower.cfg.color);
+      damageEnemy(target, tower.damage, tower);
+      applyHitEnchantments({tower, damage: tower.damage, enemy: target});
+      hitTargets.push(target);
+      origin = target.mesh.position;
+      target = null;
+    }
   }
 
   function updateGoldUI(){ goldValEl.textContent = Math.floor(gold); refreshNodeCards(); refreshSelectedTowerUI(); }
