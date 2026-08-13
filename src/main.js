@@ -442,6 +442,7 @@ import { createSelectionElements } from './runtime/dom.js';
     };
     group.userData.towerRef = tower;
     towers.push(tower);
+    createTowerSkillControl(tower);
     occupiedSet.add(gx+','+gy);
     setCellVisual(gx,gy);
     return tower;
@@ -453,6 +454,7 @@ import { createSelectionElements } from './runtime/dom.js';
     setCellVisual(tower.gx, tower.gy);
     towers = towers.filter(t => t !== tower);
     if(tower.rangeRing){ scene.remove(tower.rangeRing); }
+    removeTowerSkillControl(tower);
     refreshTowerSkillLabels();
   }
 
@@ -814,20 +816,39 @@ import { createSelectionElements } from './runtime/dom.js';
     return {x: rect.left + (projected.x + 1) * rect.width / 2, y: rect.top + (-projected.y + 1) * rect.height / 2};
   }
 
+  const towerSkillControlsByTower = new Map();
+
+  function createTowerSkillControl(tower) {
+    if (!tower.cfg.skill || towerSkillControlsByTower.has(tower)) return;
+    const control = document.createElement('button');
+    control.type = 'button';
+    control.className = 'tower-skill-control';
+    control.dataset.towerKey = tower.key;
+    control.addEventListener('click', () => activateTowerSkill(tower));
+    towerSkillControls.appendChild(control);
+    towerSkillControlsByTower.set(tower, control);
+    tower.skillLabel = control;
+  }
+
+  function removeTowerSkillControl(tower) {
+    const control = towerSkillControlsByTower.get(tower);
+    if (!control) return;
+    control.remove();
+    towerSkillControlsByTower.delete(tower);
+    tower.skillLabel = null;
+  }
+
   function refreshTowerSkillLabels() {
-    towerSkillControls.innerHTML = '';
     towers.filter((tower) => tower.cfg.skill).forEach((tower) => {
+      createTowerSkillControl(tower);
+      const control = towerSkillControlsByTower.get(tower);
       const ready = isSkillReady(tower);
-      const control = document.createElement(ready ? 'button' : 'span');
-      control.className = `tower-skill-control${ready ? ' ready' : ''}`;
+      control.classList.toggle('ready', ready);
+      control.disabled = !ready;
       control.textContent = ready ? `${tower.cfg.name} SKILL` : `${tower.skillCooldown.toFixed(1)}s`;
-      control.dataset.towerKey = tower.key;
-      if (ready) control.addEventListener('click', () => activateTowerSkill(tower));
       const position = projectWorldPosition(tower.group.position);
       control.style.left = `${position.x}px`;
       control.style.top = `${position.y}px`;
-      towerSkillControls.appendChild(control);
-      tower.skillLabel = control;
     });
   }
 
