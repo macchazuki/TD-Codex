@@ -742,7 +742,7 @@ import { createSelectionElements } from './runtime/dom.js';
     towerDetails, tileTooltip, tileTooltipName, tileTooltipDescription,
     message: messageEl, rewardOverlay, rewardCards: rewardCardsEl, overlay,
     overlayTitle, overlaySubtitle, selName, selDmg, selRange, selRate,
-    selKills, selEnchantments, purgeBtn, upgradeButtons
+    selKills, selEnchantments, purgeBtn, upgradeActions, upgradeButtons
   } = elements;
 
   function updateGoldUI(){ goldValEl.textContent = Math.floor(gold); refreshNodeCards(); refreshSelectedTowerUI(); }
@@ -918,6 +918,7 @@ import { createSelectionElements } from './runtime/dom.js';
   }
   function refreshSelectedTowerUI(){
     if(!selectedTower) return;
+    upgradeActions.classList.toggle('hidden', !hasPerk(selectedPerkKeys, PERK_KEYS.TOWER_UPGRADES));
     towerDetails.classList.remove('hidden');
     selName.textContent = selectedTower.cfg.name.toUpperCase();
     selDmg.textContent = selectedTower.damage.toFixed(1).replace('.0', '');

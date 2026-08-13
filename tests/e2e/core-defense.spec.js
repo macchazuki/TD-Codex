@@ -442,7 +442,7 @@ test('gates tower upgrades behind the tower-upgrades perk', async ({page}) => {
   await page.mouse.click(cell.x, cell.y);
   await page.mouse.click(cell.x, cell.y);
 
-  await expect(page.locator('#upgradeDamageBtn')).toBeDisabled();
+  await expect(page.locator('#upgradeActions')).toBeHidden();
   await expect(page.locator('#goldVal')).toHaveText('150');
 });
 
