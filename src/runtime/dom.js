@@ -6,6 +6,7 @@ const GAME_HUD_TEMPLATE = `
   <div id="hud">
     <div class="hud-top brackets">
       <div class="brand">CORE<span>://</span>DEFENSE</div>
+      <div id="loadoutPanel" class="loadout-panel" aria-label="Active loadout"><strong id="activeClassName"></strong><span id="activePerks"></span></div>
       <div class="stats">
         <div class="stat gold"><span class="glyph">⬡</span><span id="goldVal">150</span><label>GOLD</label></div>
         <div class="stat integrity"><span class="glyph">◈</span><span id="livesVal">20</span><label>INTEGRITY</label></div>
@@ -60,6 +61,44 @@ const GAME_HUD_TEMPLATE = `
     </div>
   </div>`;
 
+/** Creates the class and perk selection screens before deployment. */
+export function createSelectionElements() {
+  const app = document.getElementById('app');
+  app.insertAdjacentHTML('beforeend', `
+    <section id="classSelection" class="selection-screen hidden" aria-labelledby="classSelectionTitle">
+      <div class="selection-box brackets">
+        <div class="selection-kicker">LOADOUT CONFIGURATION / 01</div>
+        <h1 id="classSelectionTitle">SELECT CLASS</h1>
+        <p class="selection-subtitle">Choose a specialist to lead the defense.</p>
+        <div id="classCards"></div>
+        <button id="classContinueBtn" class="menu-btn" type="button" disabled>CONTINUE</button>
+        <button id="classBackBtn" class="menu-btn secondary" type="button">BACK</button>
+      </div>
+    </section>
+    <section id="perkSelection" class="selection-screen hidden" aria-labelledby="perkSelectionTitle">
+      <div class="selection-box brackets">
+        <div class="selection-kicker">LOADOUT CONFIGURATION / 02</div>
+        <h1 id="perkSelectionTitle">SELECT PERKS</h1>
+        <p class="selection-subtitle">Choose up to five active perks. Effects are informational for now.</p>
+        <div id="perkCards"></div>
+        <div id="perkSelectionStatus" aria-live="polite">0 / 5 SELECTED</div>
+        <button id="deployBtn" class="menu-btn" type="button">DEPLOY</button>
+        <button id="perkBackBtn" class="menu-btn secondary" type="button">BACK</button>
+      </div>
+    </section>`);
+  return {
+    classSelection: document.getElementById('classSelection'),
+    perkSelection: document.getElementById('perkSelection'),
+    classCards: document.getElementById('classCards'),
+    perkCards: document.getElementById('perkCards'),
+    classContinueBtn: document.getElementById('classContinueBtn'),
+    classBackBtn: document.getElementById('classBackBtn'),
+    deployBtn: document.getElementById('deployBtn'),
+    perkBackBtn: document.getElementById('perkBackBtn'),
+    perkSelectionStatus: document.getElementById('perkSelectionStatus')
+  };
+}
+
 /** Returns the menu elements needed before the game starts. */
 export function getMenuElements() {
   return {
@@ -94,6 +133,8 @@ export function createGameElements() {
     tileTooltipName: document.getElementById('tileTooltipName'),
     tileTooltipDescription: document.getElementById('tileTooltipDescription'),
     message: document.getElementById('message'),
+    activeClassName: document.getElementById('activeClassName'),
+    activePerks: document.getElementById('activePerks'),
     rewardOverlay: document.getElementById('rewardOverlay'),
     rewardCards: document.getElementById('rewardCards'),
     overlay: document.getElementById('overlay'),

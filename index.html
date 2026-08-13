@@ -41,6 +41,24 @@
   .menu-btn.secondary{color:var(--text-dim); border-color:var(--panel-border); background:rgba(10,16,30,0.5);}
   .menu-btn.secondary:hover{color:var(--text); border-color:var(--text-dim); box-shadow:none;}
 
+  .selection-screen{position:absolute; inset:0; z-index:45; display:flex; align-items:center; justify-content:center; background:radial-gradient(circle at 50% 42%, rgba(0,229,255,0.12), transparent 35%), rgba(4,6,12,0.92); overflow:auto;}
+  .selection-screen.hidden{display:none;}
+  .selection-box{width:min(720px, calc(100vw - 32px)); padding:34px; background:var(--panel); border:1px solid var(--panel-border);}
+  .selection-kicker{color:var(--amber); font-size:10px; letter-spacing:1.5px; margin-bottom:10px;}
+  .selection-box h1{font-family:'Orbitron',sans-serif; color:var(--cyan); letter-spacing:3px; font-size:28px;}
+  .selection-subtitle{color:var(--text-dim); font-size:11px; margin:10px 0 20px;}
+  #classCards,#perkCards{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px;}
+  .selection-card{display:flex; flex-direction:column; align-items:flex-start; gap:8px; min-height:150px; padding:16px; text-align:left; color:var(--text); background:rgba(0,229,255,0.04); border:1px solid var(--panel-border); cursor:pointer;}
+  .selection-card:hover,.selection-card.selected{border-color:var(--cyan); background:rgba(0,229,255,0.13); box-shadow:0 0 14px rgba(0,229,255,0.2);}
+  .selection-card strong{font-family:'Orbitron',sans-serif; letter-spacing:.7px; color:var(--cyan);}
+  .selection-card span:not(.selection-card-label){font-size:10px; line-height:1.5; color:var(--text-dim);}
+  .selection-card-label{font-size:9px; letter-spacing:1.4px; color:var(--amber);}
+  .selection-card small{margin-top:auto; color:var(--amber); font-size:9px; letter-spacing:1px;}
+  #classContinueBtn:disabled{opacity:.4; cursor:not-allowed;}
+  #perkSelectionStatus{color:var(--text-dim); font-size:10px; letter-spacing:1px; margin-top:16px;}
+  .loadout-panel{display:flex; flex-direction:column; min-width:145px; font-size:9px; line-height:1.5; color:var(--text-dim);}
+  .loadout-panel strong{font-family:'Orbitron',sans-serif; color:var(--cyan); font-size:10px; letter-spacing:.5px;}
+
   .brackets{
     position:relative;
   }
@@ -215,6 +233,8 @@
   .reward-stats{display:flex; justify-content:space-between; margin-top:10px; color:var(--amber); font-size:10px;}
 
   @media (max-width:520px){
+    .selection-box{padding:24px 18px;}
+    .selection-box h1{font-size:22px;}
     #rewardBox{padding:22px 14px;}
     #rewardCards{gap:6px;}
     .reward-card{padding:12px 8px; min-height:175px;}
