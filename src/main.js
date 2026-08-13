@@ -787,7 +787,7 @@ import { createSelectionElements } from './runtime/dom.js';
     towerDetails, tileTooltip, tileTooltipName, tileTooltipDescription,
     message: messageEl, rewardOverlay, rewardCards: rewardCardsEl, overlay,
     overlayTitle, overlaySubtitle, selName, selDmg, selRange, selRate,
-    selKills, selEnchantments, purgeBtn, upgradeActions, upgradeButtons, towerSkillControls
+    selKills, selEnchantments, autoCastSkillBtn, purgeBtn, upgradeActions, upgradeButtons, towerSkillControls
   } = elements;
 
   function projectWorldPosition(position) {
@@ -797,7 +797,6 @@ import { createSelectionElements } from './runtime/dom.js';
   }
 
   const towerSkillControlsByTower = new Map();
-  const towerAutoCastControlsByTower = new Map();
 
   function createTowerSkillControl(tower) {
     if (!tower.cfg.skill || towerSkillControlsByTower.has(tower)) return;
@@ -807,18 +806,7 @@ import { createSelectionElements } from './runtime/dom.js';
     control.dataset.towerKey = tower.key;
     control.addEventListener('click', () => activateTowerSkill(tower));
     towerSkillControls.appendChild(control);
-    const autoCastControl = document.createElement('button');
-    autoCastControl.type = 'button';
-    autoCastControl.className = 'tower-skill-auto-cast';
-    autoCastControl.dataset.towerKey = tower.key;
-    autoCastControl.setAttribute('aria-label', `Toggle auto-cast for ${tower.cfg.name}`);
-    autoCastControl.addEventListener('click', () => {
-      tower.autoCast = !tower.autoCast;
-      refreshTowerSkillLabels();
-    });
-    towerSkillControls.appendChild(autoCastControl);
     towerSkillControlsByTower.set(tower, control);
-    towerAutoCastControlsByTower.set(tower, autoCastControl);
     tower.skillLabel = control;
   }
 
@@ -827,8 +815,6 @@ import { createSelectionElements } from './runtime/dom.js';
     if (!control) return;
     control.remove();
     towerSkillControlsByTower.delete(tower);
-    towerAutoCastControlsByTower.get(tower)?.remove();
-    towerAutoCastControlsByTower.delete(tower);
     tower.skillLabel = null;
   }
 
@@ -840,15 +826,9 @@ import { createSelectionElements } from './runtime/dom.js';
       control.classList.toggle('ready', ready);
       control.disabled = !ready;
       control.textContent = ready ? `${tower.cfg.name} SKILL` : `${tower.skillCooldown.toFixed(1)}s`;
-      const autoCastControl = towerAutoCastControlsByTower.get(tower);
-      autoCastControl.classList.toggle('active', tower.autoCast);
-      autoCastControl.setAttribute('aria-pressed', String(tower.autoCast));
-      autoCastControl.textContent = tower.autoCast ? 'AUTO ON' : 'AUTO OFF';
       const position = projectWorldPosition(tower.group.position);
       control.style.left = `${position.x}px`;
       control.style.top = `${position.y}px`;
-      autoCastControl.style.left = `${position.x}px`;
-      autoCastControl.style.top = `${position.y + 25}px`;
     });
   }
 
@@ -1089,6 +1069,10 @@ import { createSelectionElements } from './runtime/dom.js';
   }
   function refreshSelectedTowerUI(){
     if(!selectedTower) return;
+    autoCastSkillBtn.classList.toggle('hidden', !selectedTower.cfg.skill);
+    autoCastSkillBtn.classList.toggle('active', selectedTower.autoCast);
+    autoCastSkillBtn.setAttribute('aria-pressed', String(selectedTower.autoCast));
+    autoCastSkillBtn.textContent = selectedTower.autoCast ? 'AUTO CAST: ON' : 'AUTO CAST: OFF';
     upgradeActions.classList.toggle('hidden', !hasPerk(selectedPerkKeys, PERK_KEYS.TOWER_UPGRADES));
     towerDetails.classList.remove('hidden');
     selName.textContent = selectedTower.cfg.name.toUpperCase();
@@ -1113,6 +1097,11 @@ import { createSelectionElements } from './runtime/dom.js';
     selectedTower = null;
     selectedPanel.classList.add('hidden');
   }
+  autoCastSkillBtn.addEventListener('click', () => {
+    if (!selectedTower?.cfg.skill) return;
+    selectedTower.autoCast = !selectedTower.autoCast;
+    refreshSelectedTowerUI();
+  });
   Object.keys(UPGRADE_STATS).forEach((stat)=>{
     upgradeButtons[stat].button.addEventListener('click', ()=>{
       if(!selectedTower || !hasPerk(selectedPerkKeys, PERK_KEYS.TOWER_UPGRADES)) return;
