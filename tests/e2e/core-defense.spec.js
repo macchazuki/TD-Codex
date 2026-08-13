@@ -14,6 +14,14 @@ async function chooseEngineer(page) {
   await page.locator('#classContinueBtn').click();
 }
 
+async function gotoMageGame(page) {
+  await page.goto('./');
+  await page.locator('#startGameBtn').click();
+  await page.locator('[data-class-key="mage"]').click();
+  await page.locator('#classContinueBtn').click();
+  await page.locator('#deployBtn').click();
+}
+
 async function dispatchTouchPointer(page, type, pointerId, point) {
   await page.locator('#gameCanvas').dispatchEvent(type, {
     pointerId,
@@ -186,6 +194,29 @@ test('builds walls, places towers on them, and removes towers safely', async ({p
   await page.mouse.move(secondCell.x, secondCell.y, {steps: 4});
   await page.mouse.up({button: 'right'});
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().walls)).toBe(2);
+});
+
+test('keeps Mage skill controls attached while refreshing cooldown state', async ({page}) => {
+  await gotoMageGame(page);
+  const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
+  await page.locator('[data-wall-mode="build"]').click();
+  await page.mouse.click(cell.x, cell.y);
+  await page.locator('[data-wall-mode="normal"]').click();
+  await page.locator('[data-key="fireball"]').click();
+  await page.mouse.click(cell.x, cell.y);
+
+  const skill = page.locator('#towerSkillControls [data-tower-key="fireball"]');
+  await expect(skill).toHaveText('Fireball SKILL');
+  await page.evaluate(() => {
+    window.__skillControlForTest = document.querySelector('#towerSkillControls [data-tower-key="fireball"]');
+  });
+  await page.waitForTimeout(100);
+  expect(await page.evaluate(() => window.__skillControlForTest === document.querySelector('#towerSkillControls [data-tower-key="fireball"]'))).toBe(true);
+
+  await skill.click();
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().towerSkills[0].cooldown)).toBeGreaterThan(7.5);
+  await expect(skill).toHaveText(/^[0-9]+\.[0-9]s$/);
+  expect(await page.evaluate(() => window.__skillControlForTest.isConnected)).toBe(true);
 });
 
 test.describe('mobile canvas controls', () => {

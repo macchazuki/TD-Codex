@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { CELL, ENEMY_TYPES, GRID_H, GRID_W, MAX_WAVE, TOWER_TYPES } from './game/config.js';
 import { DEFAULT_GAME_SPEED, isSupportedGameSpeed, scaleDelta } from './game/speed.js';
 import { canPlaceTower, canPlaceWall, canRemoveWall, canStartWave, cellKey, enemyHealth, findPath, generateWave } from './game/rules.js';
-import { addRewardToInventory, createRewardPool, drawRewards, removeFromInventory, removeInventoryItem } from './game/rewards.js';
+import { addRewardToInventory, createRewardPool, createStartingInventory, drawRewards, removeFromInventory, removeInventoryItem } from './game/rewards.js';
 import { INITIAL_TILES, SPECIAL_TILE_TYPES, applyDotTick, canPlaceTile, getEffectiveTowerStats, getEnemyTileEffect, getTileAt } from './game/specialTiles.js';
 import { getTowerStats, getUpgradeCost, purchaseTowerUpgrade, UPGRADE_STATS } from './game/upgrades.js';
 import { ENCHANTMENT_TYPES, applyEnchantment, applyHitEnchantments, calculateBounty, tickDotStacks } from './game/enchantments.js';
@@ -12,7 +12,8 @@ import { createGameState } from './runtime/state.js';
 import { getPointOnRoute as getPointOnRouteFromPath, getRouteMetrics as getRouteMetricsFromPath, gridToWorld as gridToWorldFromPath } from './runtime/path.js';
 import { createCameraController } from './runtime/camera.js';
 import { startGameLoop } from './runtime/loop.js';
-import { ENGINEER_PERKS, GAME_CLASSES, getGameClass, togglePerk } from './game/classes.js';
+import { GAME_CLASSES, getGameClass, getPerksForClass, getStartingTowerKeys, togglePerk } from './game/classes.js';
+import { applyBurn, applySlow, activateSkill, getChainRange, isSkillReady, selectChainTargets, tickBurn, tickSlow } from './game/combat.js';
 import { calculateInterest, hasPerk, PERK_KEYS } from './game/perks.js';
 import { createSelectionElements } from './runtime/dom.js';
 
@@ -50,7 +51,7 @@ import { createSelectionElements } from './runtime/dom.js';
   }
 
   function renderPerkCards() {
-    selection.perkCards.innerHTML = ENGINEER_PERKS.map((perk) => {
+    selection.perkCards.innerHTML = getPerksForClass(selectedClassKey).map((perk) => {
       const isSelected = selectedPerkKeys.includes(perk.key);
       return `<button class="selection-card perk-card${isSelected ? ' selected' : ''}" data-perk-key="${perk.key}" type="button" aria-pressed="${isSelected}"><span class="selection-card-label">PERK</span><strong>${perk.name}</strong><span>${perk.description}</span><small>${isSelected ? 'ACTIVE' : 'NOT SELECTED'}</small></button>`;
     }).join('');
@@ -103,9 +104,10 @@ import { createSelectionElements } from './runtime/dom.js';
 
   function initializeGame(){
   const elements = createGameElements();
+  inventory = createStartingInventory(rewardPool, getStartingTowerKeys(selectedClassKey));
   const {scene, camera, renderer} = createScene(canvas, GRID_W, GRID_H, CELL);
   elements.activeClassName.textContent = getGameClass(selectedClassKey).name;
-  elements.activePerks.textContent = selectedPerkKeys.length ? selectedPerkKeys.map((key) => ENGINEER_PERKS.find((perk) => perk.key === key).name).join(' · ') : 'No active perks';
+  elements.activePerks.textContent = selectedPerkKeys.length ? selectedPerkKeys.map((key) => getPerksForClass(selectedClassKey).find((perk) => perk.key === key).name).join(' · ') : 'No active perks';
 
   // camera orbit
   const cameraController = createCameraController(camera);
@@ -436,10 +438,11 @@ import { createSelectionElements } from './runtime/dom.js';
       damage: stats.damage, range: stats.range, fireRate: stats.fireRate, splash: cfg.splash,
       upgrades, enchantments: [...(inventoryItem?.enchantments || [])],
       cooldown: 0, target: null, kills: 0,
-      rangeRing: null
+      rangeRing: null, skillCooldown: 0, skillLabel: null
     };
     group.userData.towerRef = tower;
     towers.push(tower);
+    createTowerSkillControl(tower);
     occupiedSet.add(gx+','+gy);
     setCellVisual(gx,gy);
     return tower;
@@ -451,6 +454,8 @@ import { createSelectionElements } from './runtime/dom.js';
     setCellVisual(tower.gx, tower.gy);
     towers = towers.filter(t => t !== tower);
     if(tower.rangeRing){ scene.remove(tower.rangeRing); }
+    removeTowerSkillControl(tower);
+    refreshTowerSkillLabels();
   }
 
   /* ---------------------------------------------------------------------
@@ -522,6 +527,7 @@ import { createSelectionElements } from './runtime/dom.js';
       dotTimer: 0, activeTile: null, activeTileEffect: {speedMultiplier: 1, dotDamage: 0},
       goldValue: type.gold, lifeDamage: type.dmg,
       dotStacks: [],
+      slowStatuses: [], burnStatuses: [],
       route: worldWaypoints.map(point => point.clone()),
       routeLengths: segLengths.slice(), routeTotalLength: pathTotalLength, routeVersion
     };
@@ -542,6 +548,10 @@ import { createSelectionElements } from './runtime/dom.js';
   scene.add(projGroup);
 
   function fireProjectile(tower){
+    if (tower.key === 'lightning') {
+      fireLightningAttack(tower);
+      return;
+    }
     const cfg = tower.cfg;
     const mat = new THREE.MeshStandardMaterial({color:cfg.color, emissive:cfg.color, emissiveIntensity:2.0});
     const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8), mat);
@@ -611,6 +621,31 @@ import { createSelectionElements } from './runtime/dom.js';
     }
   }
 
+  function fireSkillProjectile(tower, target, damage, splash, skill) {
+    const mat = new THREE.MeshStandardMaterial({color: tower.cfg.color, emissive: tower.cfg.color, emissiveIntensity: 2.4});
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 10), mat);
+    mesh.position.set(tower.group.position.x, 0.85, tower.group.position.z);
+    projGroup.add(mesh);
+    projectiles.push({mesh, target, damage, splash, speed: 18, sourceTower: tower, burn: skill});
+  }
+
+  function activateTowerSkill(tower) {
+    if (!activateSkill(tower)) return false;
+    const cfg = tower.cfg;
+    if (tower.key === 'fireball' && tower.target?.alive) {
+      fireSkillProjectile(tower, tower.target, cfg.skill.damage, cfg.skill.splash, cfg.skill);
+    } else if (tower.key === 'lightning') {
+      const targets = buildLightningTargets(tower, cfg.skill.hits, true);
+      fireLightningAttack(tower, cfg.skill.hits, targets);
+    } else if (tower.key === 'frost') {
+      enemies.forEach((enemy) => {
+        if (enemy.alive && distXZ(tower.group.position, enemy.mesh.position) <= cfg.skill.radius) applySlow(enemy, cfg.skill.slowAmount, cfg.skill.duration);
+      });
+    }
+    refreshTowerSkillLabels();
+    return true;
+  }
+
   /* ---------------------------------------------------------------------
      UPDATE LOOP FUNCTIONS
   --------------------------------------------------------------------- */
@@ -620,12 +655,14 @@ import { createSelectionElements } from './runtime/dom.js';
       const cell = getGridCellFromWorld(enemy.mesh.position);
       const tile = getTileAt(tiles, cell.gx, cell.gy);
       const tileEffect = getEnemyTileEffect(tile);
+      const slowMultiplier = tickSlow(enemy, dt);
+      tickBurn(enemy, dt).forEach((damage) => damageEnemy(enemy, damage, null));
       enemy.activeTile = tile?.key || null;
       enemy.activeTileEffect = tileEffect;
       const enchantmentTicks = tickDotStacks({enemy, dt});
       enchantmentTicks.forEach((tick) => damageEnemy(enemy, tick.damage, tick.sourceTower));
       if(!enemy.alive) continue;
-      enemy.traveled += enemy.speed * tileEffect.speedMultiplier * dt;
+      enemy.traveled += enemy.speed * tileEffect.speedMultiplier * slowMultiplier * dt;
       const dotTick = applyDotTick({timer: enemy.dotTimer, dt, damage: tileEffect.dotDamage, interval: tileEffect.dotInterval});
       enemy.dotTimer = tileEffect.dotDamage ? dotTick.timer : 0;
       if(dotTick.damage) damageEnemy(enemy, dotTick.damage, null);
@@ -662,6 +699,7 @@ import { createSelectionElements } from './runtime/dom.js';
     for(const tower of towers){
       refreshTowerStats(tower);
       tower.cooldown -= dt;
+      tower.skillCooldown = Math.max(0, tower.skillCooldown - dt);
       if(!tower.target || !tower.target.alive || distXZ(tower.group.position, tower.target.mesh.position) > tower.range){
         tower.target = null;
         let best=null, bestDist=Infinity;
@@ -685,6 +723,7 @@ import { createSelectionElements } from './runtime/dom.js';
         tower.group.userData.turret.position.y = 0.42;
       }
     }
+    refreshTowerSkillLabels();
   }
 
   function updateProjectiles(dt){
@@ -700,12 +739,15 @@ import { createSelectionElements } from './runtime/dom.js';
       if(dist < 0.35){
         damageEnemy(proj.target, proj.damage, proj.sourceTower);
         applyHitEnchantments({tower: proj.sourceTower, damage: proj.damage, enemy: proj.target});
+        if (proj.sourceTower.key === 'frost') applySlow(proj.target, proj.sourceTower.cfg.slow.amount, proj.sourceTower.cfg.slow.duration);
+        if (proj.burn) applyBurn(proj.target, proj.burn.burnDamage, proj.burn.burnDuration);
         if(proj.splash > 0){
           for(const e of enemies){
             if(e === proj.target || !e.alive) continue;
             if(distXZ(e.mesh.position, targetPos) <= proj.splash){
               damageEnemy(e, proj.damage*0.6, proj.sourceTower);
               applyHitEnchantments({tower: proj.sourceTower, damage: proj.damage*0.6, enemy: e});
+              if (proj.burn) applyBurn(e, proj.burn.burnDamage, proj.burn.burnDuration);
             }
           }
         }
@@ -725,8 +767,10 @@ import { createSelectionElements } from './runtime/dom.js';
     for(const fx of effects){
       fx.life -= dt;
       if(fx.life <= 0){ scene.remove(fx.mesh); continue; }
-      const s = 1 + (1-fx.life/fx.maxLife)*3;
-      fx.mesh.scale.set(s,s,s);
+      if (fx.shouldScale !== false) {
+        const s = 1 + (1-fx.life/fx.maxLife)*3;
+        fx.mesh.scale.set(s,s,s);
+      }
       fx.mesh.material.opacity = fx.life/fx.maxLife;
       remaining.push(fx);
     }
@@ -742,8 +786,114 @@ import { createSelectionElements } from './runtime/dom.js';
     towerDetails, tileTooltip, tileTooltipName, tileTooltipDescription,
     message: messageEl, rewardOverlay, rewardCards: rewardCardsEl, overlay,
     overlayTitle, overlaySubtitle, selName, selDmg, selRange, selRate,
-    selKills, selEnchantments, purgeBtn, upgradeActions, upgradeButtons
+    selKills, selEnchantments, purgeBtn, upgradeActions, upgradeButtons, towerSkillControls
   } = elements;
+
+  function projectWorldPosition(position) {
+    const projected = position.clone().setY(WALL_TOP + 1.1).project(camera);
+    const rect = canvas.getBoundingClientRect();
+    return {x: rect.left + (projected.x + 1) * rect.width / 2, y: rect.top + (-projected.y + 1) * rect.height / 2};
+  }
+
+  const towerSkillControlsByTower = new Map();
+
+  function createTowerSkillControl(tower) {
+    if (!tower.cfg.skill || towerSkillControlsByTower.has(tower)) return;
+    const control = document.createElement('button');
+    control.type = 'button';
+    control.className = 'tower-skill-control';
+    control.dataset.towerKey = tower.key;
+    control.addEventListener('click', () => activateTowerSkill(tower));
+    towerSkillControls.appendChild(control);
+    towerSkillControlsByTower.set(tower, control);
+    tower.skillLabel = control;
+  }
+
+  function removeTowerSkillControl(tower) {
+    const control = towerSkillControlsByTower.get(tower);
+    if (!control) return;
+    control.remove();
+    towerSkillControlsByTower.delete(tower);
+    tower.skillLabel = null;
+  }
+
+  function refreshTowerSkillLabels() {
+    towers.filter((tower) => tower.cfg.skill).forEach((tower) => {
+      createTowerSkillControl(tower);
+      const control = towerSkillControlsByTower.get(tower);
+      const ready = isSkillReady(tower);
+      control.classList.toggle('ready', ready);
+      control.disabled = !ready;
+      control.textContent = ready ? `${tower.cfg.name} SKILL` : `${tower.skillCooldown.toFixed(1)}s`;
+      const position = projectWorldPosition(tower.group.position);
+      control.style.left = `${position.x}px`;
+      control.style.top = `${position.y}px`;
+    });
+  }
+
+  function buildLightningTargets(tower, limit, allowRevisits) {
+    const targets = [];
+    let origin = tower.group.position;
+    const enemyDistance = (position, enemy) => distXZ(position, enemy.mesh.position);
+    for (let index = 0; index < limit; index += 1) {
+      const candidates = selectChainTargets({origin, enemies, range: index === 0 ? tower.range : getChainRange(tower.range), limit: 1, visited: new Set(targets), allowVisited: allowRevisits && index >= enemies.filter((enemy) => enemy.alive).length, distance: enemyDistance});
+      if (!candidates.length) break;
+      targets.push(candidates[0]);
+      origin = candidates[0].mesh.position;
+    }
+    return targets;
+  }
+
+  function spawnLightningArc(from, to, color) {
+    const start = new THREE.Vector3(from.x, 0.7, from.z);
+    const end = new THREE.Vector3(to.x, 0.7, to.z);
+    const direction = new THREE.Vector3().subVectors(end, start);
+    const length = Math.hypot(direction.x, direction.z);
+    if (!Number.isFinite(length)) return;
+    if (length < 0.001) {
+      spawnEffect(start, color);
+      return;
+    }
+    const perpendicular = new THREE.Vector3(-direction.z / length, 0, direction.x / length);
+    const offset = Math.min(0.16, length * 0.2);
+    const points = [start];
+    for (let index = 1; index < 4; index += 1) {
+      const point = start.clone().lerp(end, index / 4);
+      point.addScaledVector(perpendicular, index % 2 ? offset : -offset);
+      points.push(point);
+    }
+    points.push(end);
+    const mesh = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({color, transparent: true, opacity: 1}));
+    scene.add(mesh);
+    effects.push({mesh, life: 0.18, maxLife: 0.18, shouldScale: false});
+  }
+
+  function fireLightningAttack(tower, maxHits = 3, targets = null) {
+    const hitTargets = [];
+    let origin = tower.group.position;
+    let target = tower.target?.alive ? tower.target : null;
+    for (let index = 0; index < maxHits; index += 1) {
+      if (targets) target = targets[index] || null;
+      if (!target) {
+        const candidates = selectChainTargets({
+          origin,
+          enemies,
+          range: index === 0 ? tower.range : getChainRange(tower.range),
+          limit: 1,
+          visited: new Set(hitTargets),
+          distance: (position, enemy) => distXZ(position, enemy.mesh.position)
+        });
+        target = candidates[0] || null;
+      }
+      if (!target?.alive) break;
+      spawnLightningArc(origin, target.mesh.position, tower.cfg.color);
+      damageEnemy(target, tower.damage, tower);
+      applyHitEnchantments({tower, damage: tower.damage, enemy: target});
+      hitTargets.push(target);
+      origin = target.mesh.position;
+      target = null;
+    }
+  }
 
   function updateGoldUI(){ goldValEl.textContent = Math.floor(gold); refreshNodeCards(); refreshSelectedTowerUI(); }
   function updateLivesUI(){ livesValEl.textContent = Math.max(0,Math.floor(lives)); }
@@ -1393,6 +1543,7 @@ import { createSelectionElements } from './runtime/dom.js';
     camera.aspect = window.innerWidth/window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    refreshTowerSkillLabels();
   });
 
   /* ---------------------------------------------------------------------
@@ -1429,7 +1580,7 @@ import { createSelectionElements } from './runtime/dom.js';
     gold = 150; lives = 20; wave = 0; waveInProgress = false; gameOver = false; awaitingReward = false;
     setGameSpeed(DEFAULT_GAME_SPEED);
     spawnQueue = []; spawnTimer = 0;
-    inventory = rewardPool.filter((reward) => reward.type === 'tower').map((reward) => ({...reward}));
+    inventory = createStartingInventory(rewardPool, getStartingTowerKeys(selectedClassKey || 'engineer'));
     currentRewards = [];
     setWallEditMode('normal');
     selectedTowerType = null; selectedTileType = null; selectedEnchantmentType = null; clearPreview(); deselectTower();
@@ -1472,6 +1623,8 @@ import { createSelectionElements } from './runtime/dom.js';
         enchantmentInventory: inventory.filter((item) => item.type === 'enchantment').map((item) => item.key),
         enemyEffects: enemies.map((enemy) => ({activeTile: enemy.activeTile, speedMultiplier: enemy.activeTileEffect.speedMultiplier, dotDamage: enemy.activeTileEffect.dotDamage, dotTimer: enemy.dotTimer})),
         towerStats: towers.map((tower) => ({key: tower.key, gx: tower.gx, gy: tower.gy, damage: tower.damage, range: tower.range, fireRate: tower.fireRate, activeTile: tower.activeTile})),
+        towerSkills: towers.filter((tower) => tower.cfg.skill).map((tower) => ({key: tower.key, cooldown: tower.skillCooldown, ready: isSkillReady(tower)})),
+        activeStatuses: enemies.map((enemy) => ({slow: [...(enemy.slowStatuses || [])], burn: [...(enemy.burnStatuses || [])]})),
         towerUpgrades: towers.map((tower) => ({...tower.upgrades})),
         towerEnchantments: towers.map((tower) => [...tower.enchantments]),
         activeDotEffects: enemies.flatMap((enemy) => enemy.dotStacks.map((stack) => ({type: stack.typeKey, damage: stack.damage, remainingTicks: stack.remainingTicks}))),
@@ -1482,6 +1635,7 @@ import { createSelectionElements } from './runtime/dom.js';
         cameraDistance: camDistance,
         enemies: enemies.length,
         inventory: inventory.map((item) => item.key),
+        startingInventory: getStartingTowerKeys(selectedClassKey || 'engineer'),
         inventoryItems: inventory.map((item) => ({type: item.type, key: item.key})),
         awaitingReward,
         rewardChoices: currentRewards.map((reward) => reward.key),
