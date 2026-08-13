@@ -21,6 +21,7 @@ test('shows the main menu and starts the tower defence map', async ({page}) => {
   await page.goto('./');
   await expect(page.locator('#mainMenu')).toBeVisible();
   await expect(page.locator('#gameCanvas')).toBeHidden();
+  await expect(page.locator('#hud')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState())).toMatchObject({
     scene: 'main-menu',
     renderStatus: 'unknown',
@@ -31,6 +32,7 @@ test('shows the main menu and starts the tower defence map', async ({page}) => {
   await page.locator('#settingsBtn').click();
   await expect(page.locator('#mainMenu')).toBeVisible();
   await page.locator('#startGameBtn').click();
+  await expect(page.locator('#hud')).toBeVisible();
   await expect(page.locator('#mainMenu')).toBeHidden();
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().scene)).toBe('tower-defence-map');
   await expect(page.locator('.brand')).toHaveText('CORE://DEFENSE');
