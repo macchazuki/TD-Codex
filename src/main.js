@@ -854,11 +854,18 @@ import { createSelectionElements } from './runtime/dom.js';
     const start = new THREE.Vector3(from.x, 0.7, from.z);
     const end = new THREE.Vector3(to.x, 0.7, to.z);
     const direction = new THREE.Vector3().subVectors(end, start);
-    const perpendicular = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
+    const length = Math.hypot(direction.x, direction.z);
+    if (!Number.isFinite(length)) return;
+    if (length < 0.001) {
+      spawnEffect(start, color);
+      return;
+    }
+    const perpendicular = new THREE.Vector3(-direction.z / length, 0, direction.x / length);
+    const offset = Math.min(0.16, length * 0.2);
     const points = [start];
     for (let index = 1; index < 4; index += 1) {
       const point = start.clone().lerp(end, index / 4);
-      point.addScaledVector(perpendicular, (index % 2 ? 0.16 : -0.16));
+      point.addScaledVector(perpendicular, index % 2 ? offset : -offset);
       points.push(point);
     }
     points.push(end);
