@@ -6,6 +6,11 @@ export function selectChainTargets({origin, enemies, range, limit, visited = new
   return candidates.sort((left, right) => distance(origin, left) - distance(origin, right)).slice(0, limit);
 }
 
+/** Returns the maximum distance between successive chain targets. */
+export function getChainRange(attackRange) {
+  return attackRange * 0.5;
+}
+
 /** Adds or refreshes a timed slow status without disturbing other statuses. */
 export function applySlow(enemy, amount, duration) {
   enemy.slowStatuses = enemy.slowStatuses || [];

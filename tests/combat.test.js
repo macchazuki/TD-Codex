@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {activateSkill, applyBurn, applySlow, isSkillReady, selectChainTargets, tickBurn, tickSlow} from '../src/game/combat.js';
+import {activateSkill, applyBurn, applySlow, getChainRange, isSkillReady, selectChainTargets, tickBurn, tickSlow} from '../src/game/combat.js';
 
 const distance = (origin, enemy) => Math.abs(origin.x - enemy.x);
 
@@ -9,6 +9,10 @@ describe('Mage combat skills', () => {
     const selected = selectChainTargets({origin: {x: 0}, enemies, range: 4, limit: 3, distance});
     expect(selected).toHaveLength(3);
     expect(new Set(selected).size).toBe(3);
+  });
+
+  it('uses half the attack range for successive chain jumps', () => {
+    expect(getChainRange(5.8)).toBe(2.9);
   });
 
   it('allows ten-hit chains to revisit targets', () => {

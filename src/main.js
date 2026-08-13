@@ -13,7 +13,7 @@ import { getPointOnRoute as getPointOnRouteFromPath, getRouteMetrics as getRoute
 import { createCameraController } from './runtime/camera.js';
 import { startGameLoop } from './runtime/loop.js';
 import { GAME_CLASSES, getGameClass, getPerksForClass, getStartingTowerKeys, togglePerk } from './game/classes.js';
-import { applyBurn, applySlow, activateSkill, isSkillReady, selectChainTargets, tickBurn, tickSlow } from './game/combat.js';
+import { applyBurn, applySlow, activateSkill, getChainRange, isSkillReady, selectChainTargets, tickBurn, tickSlow } from './game/combat.js';
 import { calculateInterest, hasPerk, PERK_KEYS } from './game/perks.js';
 import { createSelectionElements } from './runtime/dom.js';
 
@@ -632,7 +632,7 @@ import { createSelectionElements } from './runtime/dom.js';
       const hits = [];
       let origin = tower.group.position;
       for (let index = 0; index < cfg.skill.hits; index += 1) {
-        const targets = selectChainTargets({origin, enemies, range: tower.range, limit: 1, visited: new Set(hits), allowVisited: index >= enemies.filter((enemy) => enemy.alive).length, distance: distXZ});
+        const targets = selectChainTargets({origin, enemies, range: index === 0 ? tower.range : getChainRange(tower.range), limit: 1, visited: new Set(hits), allowVisited: index >= enemies.filter((enemy) => enemy.alive).length, distance: distXZ});
         if (!targets.length) break;
         hits.push(targets[0]);
         damageEnemy(targets[0], tower.damage, tower);
@@ -742,7 +742,7 @@ import { createSelectionElements } from './runtime/dom.js';
         applyHitEnchantments({tower: proj.sourceTower, damage: proj.damage, enemy: proj.target});
         if (proj.sourceTower.key === 'frost') applySlow(proj.target, proj.sourceTower.cfg.slow.amount, proj.sourceTower.cfg.slow.duration);
         if (proj.sourceTower.key === 'lightning') {
-          selectChainTargets({origin: proj.target.mesh.position, enemies, range: proj.sourceTower.range, limit: 2, visited: new Set([proj.target]), distance: distXZ})
+          selectChainTargets({origin: proj.target.mesh.position, enemies, range: getChainRange(proj.sourceTower.range), limit: 2, visited: new Set([proj.target]), distance: distXZ})
             .forEach((enemy) => damageEnemy(enemy, proj.damage * 0.7, proj.sourceTower));
         }
         if (proj.burn) applyBurn(proj.target, proj.burn.burnDamage, proj.burn.burnDuration);
