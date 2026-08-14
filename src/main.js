@@ -611,6 +611,10 @@ import { createSelectionElements } from './runtime/dom.js';
   function checkWaveComplete(){
     if(waveInProgress && !gameOver && spawnQueue.length===0 && enemies.length===0){
       waveInProgress = false;
+      towers.forEach((tower) => {
+        if (tower.cfg.skill) tower.skillCooldown = 0;
+      });
+      refreshTowerSkillLabels();
       const interest = calculateInterest({gold, perkKeys: selectedPerkKeys});
       if(interest > 0){
         gold += interest;
@@ -804,6 +808,8 @@ import { createSelectionElements } from './runtime/dom.js';
     control.type = 'button';
     control.className = 'tower-skill-control';
     control.dataset.towerKey = tower.key;
+    control.setAttribute('aria-label', `Activate ${tower.cfg.name} skill`);
+    control.title = `Activate ${tower.cfg.name} skill`;
     control.addEventListener('click', () => activateTowerSkill(tower));
     towerSkillControls.appendChild(control);
     towerSkillControlsByTower.set(tower, control);
@@ -823,9 +829,12 @@ import { createSelectionElements } from './runtime/dom.js';
       createTowerSkillControl(tower);
       const control = towerSkillControlsByTower.get(tower);
       const ready = isSkillReady(tower);
+      const cooldown = tower.cfg.skill.cooldown;
+      const cooldownProgress = Math.max(0, Math.min(1, 1 - tower.skillCooldown / cooldown));
       control.classList.toggle('ready', ready);
       control.disabled = !ready;
-      control.textContent = ready ? `${tower.cfg.name} SKILL` : `${tower.skillCooldown.toFixed(1)}s`;
+      control.style.setProperty('--cooldown-progress', String(cooldownProgress));
+      control.title = ready ? `Activate ${tower.cfg.name} skill` : `${tower.cfg.name} skill cooldown: ${tower.skillCooldown.toFixed(1)} seconds`;
       const position = projectWorldPosition(tower.group.position);
       control.style.left = `${position.x}px`;
       control.style.top = `${position.y}px`;
