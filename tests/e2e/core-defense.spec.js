@@ -101,11 +101,21 @@ test('selects an engineer loadout before deployment', async ({page}) => {
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState())).toMatchObject({scene: 'tower-defence-map', selectedClass: 'engineer', selectedPerks: ['tower-upgrades', 'gold-interest'], mapCells: 96});
 });
 
-test('shows wall mode controls with normal mode active', async ({page}) => {
+test('shows wall mode controls with build mode active at game start', async ({page}) => {
   await gotoGame(page);
   await expect(page.locator('.wall-mode-btn')).toHaveText(['Normal', 'Build', 'Remove']);
+  await expect(page.locator('.wall-mode-btn.active')).toHaveText('Build');
+  await expect(page.locator('.wall-mode-btn[data-wall-mode="build"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().wallEditMode)).toBe('build');
+});
+
+test('switches to normal mode when an inventory item is selected', async ({page}) => {
+  await gotoGame(page);
+  await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().wallEditMode)).toBe('build');
+
+  await page.locator('#nodeCards .node-card').first().click();
+
   await expect(page.locator('.wall-mode-btn.active')).toHaveText('Normal');
-  await expect(page.locator('.wall-mode-btn[data-wall-mode="normal"]')).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().wallEditMode)).toBe('normal');
 });
 
@@ -292,6 +302,7 @@ test.describe('mobile canvas controls', () => {
 
   test('normal touch taps select without editing walls', async ({page}) => {
     await gotoGame(page);
+    await page.locator('[data-wall-mode="normal"]').click();
     const cell = await page.evaluate(() => window.__CORE_DEFENSE__.projectCell(0, 0));
     await dispatchTouchPointer(page, 'pointerdown', 1, cell);
     await dispatchTouchPointer(page, 'pointerup', 1, cell);

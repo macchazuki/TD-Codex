@@ -977,6 +977,7 @@ import { createSelectionElements } from './runtime/dom.js';
           selectedEnchantmentType = null;
           clearPreview();
         } else {
+          setWallEditMode('normal');
           selectedTowerType = isTile || item.type === 'enchantment' ? null : cfg.key;
           selectedTileType = isTile ? cfg.key : null;
           selectedEnchantmentType = isEnchantment ? cfg.key : null;
@@ -1167,6 +1168,7 @@ import { createSelectionElements } from './runtime/dom.js';
   const touchGesture = {midpoint: null, distance: 0};
   const CAMERA_TARGET_MARGIN = CELL * 2;
   let mousePanPoint = null;
+  setWallEditMode('build');
 
   function setMouseFromEvent(e){
     const rect = canvas.getBoundingClientRect();
