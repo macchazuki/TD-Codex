@@ -935,6 +935,13 @@ import { createSelectionElements } from './runtime/dom.js';
     refreshWallModeButtons();
     return true;
   }
+  function clearInventorySelection(){
+    selectedTowerType = null;
+    selectedTileType = null;
+    selectedEnchantmentType = null;
+    clearPreview();
+    refreshNodeCards();
+  }
   function refreshWaveButton(){
     waveBtn.disabled = waveInProgress || awaitingReward || gameOver || wave>=MAX_WAVE;
     waveBtn.textContent = wave>=MAX_WAVE ? 'ALL WAVES CLEARED' : (awaitingReward ? 'SELECT REWARD' : (waveInProgress ? 'WAVE IN PROGRESS' : (wave===0 ? 'INITIATE WAVE' : 'NEXT WAVE')));
@@ -977,6 +984,7 @@ import { createSelectionElements } from './runtime/dom.js';
           selectedEnchantmentType = null;
           clearPreview();
         } else {
+          setWallEditMode('normal');
           selectedTowerType = isTile || item.type === 'enchantment' ? null : cfg.key;
           selectedTileType = isTile ? cfg.key : null;
           selectedEnchantmentType = isEnchantment ? cfg.key : null;
@@ -1148,7 +1156,10 @@ import { createSelectionElements } from './runtime/dom.js';
     button.addEventListener('click', () => setGameSpeed(Number(button.dataset.speed)));
   });
   wallModeButtons.forEach((button) => {
-    button.addEventListener('click', () => setWallEditMode(button.dataset.wallMode));
+    button.addEventListener('click', () => {
+      clearInventorySelection();
+      setWallEditMode(button.dataset.wallMode);
+    });
   });
   refreshSpeedButtons();
   refreshWallModeButtons();
@@ -1167,6 +1178,7 @@ import { createSelectionElements } from './runtime/dom.js';
   const touchGesture = {midpoint: null, distance: 0};
   const CAMERA_TARGET_MARGIN = CELL * 2;
   let mousePanPoint = null;
+  setWallEditMode('build');
 
   function setMouseFromEvent(e){
     const rect = canvas.getBoundingClientRect();
