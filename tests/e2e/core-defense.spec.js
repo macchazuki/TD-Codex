@@ -119,6 +119,18 @@ test('switches to normal mode when an inventory item is selected', async ({page}
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().wallEditMode)).toBe('normal');
 });
 
+test('clears inventory selection when any wall mode button is clicked', async ({page}) => {
+  await gotoGame(page);
+  const inventoryCard = page.locator('#nodeCards .node-card').first();
+
+  for (const mode of ['normal', 'build', 'remove']) {
+    await inventoryCard.click();
+    await expect(page.locator('#nodeCards .node-card.active')).toHaveCount(1);
+    await page.locator(`[data-wall-mode="${mode}"]`).click();
+    await expect(page.locator('#nodeCards .node-card.active')).toHaveCount(0);
+  }
+});
+
 test('switches wall modes and resets to normal', async ({page}) => {
   await gotoGame(page);
   for (const mode of ['build', 'remove', 'normal']) {

@@ -935,6 +935,13 @@ import { createSelectionElements } from './runtime/dom.js';
     refreshWallModeButtons();
     return true;
   }
+  function clearInventorySelection(){
+    selectedTowerType = null;
+    selectedTileType = null;
+    selectedEnchantmentType = null;
+    clearPreview();
+    refreshNodeCards();
+  }
   function refreshWaveButton(){
     waveBtn.disabled = waveInProgress || awaitingReward || gameOver || wave>=MAX_WAVE;
     waveBtn.textContent = wave>=MAX_WAVE ? 'ALL WAVES CLEARED' : (awaitingReward ? 'SELECT REWARD' : (waveInProgress ? 'WAVE IN PROGRESS' : (wave===0 ? 'INITIATE WAVE' : 'NEXT WAVE')));
@@ -1149,7 +1156,10 @@ import { createSelectionElements } from './runtime/dom.js';
     button.addEventListener('click', () => setGameSpeed(Number(button.dataset.speed)));
   });
   wallModeButtons.forEach((button) => {
-    button.addEventListener('click', () => setWallEditMode(button.dataset.wallMode));
+    button.addEventListener('click', () => {
+      clearInventorySelection();
+      setWallEditMode(button.dataset.wallMode);
+    });
   });
   refreshSpeedButtons();
   refreshWallModeButtons();
