@@ -611,6 +611,10 @@ import { createSelectionElements } from './runtime/dom.js';
   function checkWaveComplete(){
     if(waveInProgress && !gameOver && spawnQueue.length===0 && enemies.length===0){
       waveInProgress = false;
+      towers.forEach((tower) => {
+        if (tower.cfg.skill) tower.skillCooldown = 0;
+      });
+      refreshTowerSkillLabels();
       const interest = calculateInterest({gold, perkKeys: selectedPerkKeys});
       if(interest > 0){
         gold += interest;
