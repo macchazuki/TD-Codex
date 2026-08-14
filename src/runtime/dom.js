@@ -3,8 +3,8 @@ const GAME_HUD_TEMPLATE = `
     <h3 id="tileTooltipName"></h3>
     <p id="tileTooltipDescription"></p>
   </div>
+  <div id="towerSkillControls" aria-label="Tower skills"></div>
   <div id="hud">
-    <div id="towerSkillControls" aria-label="Tower skills"></div>
     <div class="hud-top brackets">
       <div class="brand">CORE<span>://</span>DEFENSE</div>
       <div id="loadoutPanel" class="loadout-panel" aria-label="Active loadout"><strong id="activeClassName"></strong><span id="activePerks"></span></div>

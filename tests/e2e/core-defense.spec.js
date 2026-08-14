@@ -212,7 +212,18 @@ test('keeps Mage skill controls attached while refreshing cooldown state', async
   await autoCast.click();
   await expect(autoCast).toHaveText('AUTO CAST: ON');
   await expect(autoCast).toHaveAttribute('aria-pressed', 'true');
-  await expect(skill).toHaveText('Fireball SKILL');
+  await expect(skill).toHaveText('');
+  await expect(skill).toHaveAttribute('aria-label', 'Activate Fireball skill');
+  await expect.poll(() => skill.evaluate((element) => ({
+    width: element.getBoundingClientRect().width,
+    height: element.getBoundingClientRect().height,
+    progress: element.style.getPropertyValue('--cooldown-progress')
+  }))).toEqual({width: 44, height: 44, progress: '1'});
+  await expect.poll(() => page.evaluate(() => ({
+    skill: Number.parseInt(getComputedStyle(document.querySelector('#towerSkillControls')).zIndex, 10),
+    hud: Number.parseInt(getComputedStyle(document.querySelector('.hud-top')).zIndex, 10),
+    reward: Number.parseInt(getComputedStyle(document.querySelector('#rewardOverlay')).zIndex, 10)
+  }))).toEqual({skill: 5, hud: 30, reward: 15});
   await page.evaluate(() => {
     window.__skillControlForTest = document.querySelector('#towerSkillControls [data-tower-key="fireball"]');
   });
@@ -221,7 +232,8 @@ test('keeps Mage skill controls attached while refreshing cooldown state', async
 
   await skill.click();
   await expect.poll(() => page.evaluate(() => window.__CORE_DEFENSE__.getSceneState().towerSkills[0].cooldown)).toBeGreaterThan(7.5);
-  await expect(skill).toHaveText(/^[0-9]+\.[0-9]s$/);
+  await expect(skill).toHaveText('');
+  await expect.poll(() => skill.evaluate((element) => Number(element.style.getPropertyValue('--cooldown-progress')))).toBeLessThan(1);
   expect(await page.evaluate(() => window.__skillControlForTest.isConnected)).toBe(true);
 });
 
